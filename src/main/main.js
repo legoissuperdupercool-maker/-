@@ -9,6 +9,7 @@ const { listOllamaModels, fetchModels, testConnection } = require('./agent/opena
 const docker = require('./docker');
 const stats = require('./stats');
 const { Engine } = require('./engine');
+const { Updater } = require('./updater');
 
 let win;
 let settings;
@@ -16,6 +17,7 @@ let ptys;
 let agent;
 let engine;
 let tray;
+let updater;
 let quitting = false;
 let trayHintShown = false;
 
@@ -133,6 +135,21 @@ app.whenReady().then(() => {
     return true;
   });
   engine.detect().catch(() => {});
+
+  updater = new Updater(send);
+  handle('update:state', () => updater.state);
+  handle('update:check', () => updater.check());
+  handle('update:download', () => updater.download());
+  handle('update:install', async () => {
+    // Stop our engine first so the installer can replace files; containers come back after.
+    quitting = true;
+    ptys?.killAll();
+    agent?.stop();
+    await engine?.stop();
+    updater.install();
+  });
+  handle('app:version', () => app.getVersion());
+  updater.start();
 
   handle('pty:create', (cols, rows) => ptys.create(cols, rows));
   ipcMain.on('pty:write', (_e, { id, data }) => ptys.write(id, data));

@@ -98,6 +98,28 @@ h3 { margin: 0; font-size: 13px; font-weight: 600; color: var(--text); letter-sp
 .icon-btn svg { width: 17px; height: 17px; }
 .icon-btn:hover { color: var(--cyan); border-color: rgba(34, 228, 255, 0.4); }
 
+/* ---------- updates ---------- */
+.update-chip { cursor: pointer; color: #07080d; font-weight: 700; border: 0; background: linear-gradient(135deg, var(--cyan), var(--violet)); box-shadow: 0 0 18px rgba(34, 228, 255, 0.45); animation: glowpulse 2.2s ease-in-out infinite; -webkit-app-region: no-drag; }
+.update-chip[hidden] { display: none; }
+.update-chip .spark { font-style: normal; }
+.update-chip:hover { filter: brightness(1.1); }
+@keyframes glowpulse { 50% { box-shadow: 0 0 30px rgba(168, 85, 247, 0.75); } }
+.update-pop { position: absolute; top: 84px; right: 26px; z-index: 30; width: 380px; display: flex; flex-direction: column; gap: 10px; background: rgba(14, 16, 28, 0.96); border-color: rgba(34, 228, 255, 0.35); box-shadow: 0 20px 60px rgba(0,0,0,0.6), var(--glow-c); animation: fadeUp 0.2s ease; }
+.update-pop[hidden] { display: none; }
+.up-h { display: flex; gap: 12px; align-items: center; }
+.up-h > div { flex: 1; }
+.up-h b { font-size: 15px; }
+.up-ico { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; font-size: 18px; color: #07080d; background: linear-gradient(135deg, var(--cyan), var(--violet)); box-shadow: var(--glow-c); }
+.up-notes { margin: 0; max-height: 160px; overflow: auto; white-space: pre-wrap; font: 12px/1.5 var(--sans); color: var(--muted); background: rgba(0,0,0,0.3); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.up-notes:empty { display: none; }
+.update-pop .engine-progress { max-width: none; margin: 0; }
+.update-pop .engine-progress i { width: var(--p, 0%); transition: width 0.3s; }
+.update-pop .row.end { margin-top: 2px; }
+.main { position: relative; }
+.about .row { justify-content: space-between; }
+.about-ver b { font-size: 15px; }
+.about-ver .mono { color: var(--cyan); font-size: 12.5px; margin-left: 4px; }
+
 /* ---------- dashboard ---------- */
 .gauges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
 .gauge { display: flex; flex-direction: column; align-items: center; padding: 18px 12px 14px; }

@@ -32,11 +32,18 @@
           <div class="sub" id="hostLine">Connecting…</div>
         </div>
         <div class="chips">
+          <button class="chip update-chip" id="updateChip" hidden><i class="spark">✦</i><span>Update available</span></button>
           <span class="chip" id="dockerChip"><i class="led"></i><span>Docker</span></span>
           <span class="chip" id="engineChip"><i class="led on"></i><span>AI</span></span>
           <span class="chip mono" id="clock">--:--</span>
         </div>
       </header>
+      <div class="card update-pop" id="updatePop" hidden>
+        <div class="up-h"><span class="up-ico">✦</span><div><b id="upTitle">Update available</b><div class="sub" id="upSub"></div></div><button class="icon-btn" id="upClose" title="Close">✕</button></div>
+        <pre class="up-notes" id="upNotes"></pre>
+        <div class="engine-progress" id="upProgress" hidden><i style="animation:none"></i></div>
+        <div class="row end" id="upActions"></div>
+      </div>
 
       <!-- Dashboard -->
       <section class="view active" id="view-dashboard">
@@ -156,6 +163,11 @@
             <label class="toggle"><input type="checkbox" id="autoApprove" /><span></span>Let the AI read stats, logs and files without asking (it always asks before changing anything)</label>
           </div>
           <div class="row end"><span class="saved" id="savedMsg"></span><button class="primary" id="saveSettings">Save settings</button></div>
+
+          <h2>About</h2>
+          <div class="card form about">
+            <div class="row"><div class="about-ver"><b>Forge</b> <span class="mono" id="appVersion">…</span><div class="sub" id="updateStatus">Checking for updates…</div></div><button class="ghost" id="checkUpdates">↻ Check for updates</button></div>
+          </div>
         </div>
       </section>
     </main>

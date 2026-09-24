@@ -875,11 +875,70 @@ function resetChat() {
 const welcomeTemplate = $('#welcome').cloneNode(true);
 $('#resetChat').onclick = resetChat;
 
+// ---------------------------------------------------------------- updates
+let update = { state: 'idle' };
+let updateToastShown = false;
+
+function renderUpdate() {
+  const u = update;
+  const has = ['available', 'downloading', 'ready'].includes(u.state);
+  const chip = $('#updateChip');
+  chip.hidden = !has;
+  $('span', chip).textContent = u.state === 'ready' ? 'Restart to update' : u.state === 'downloading' ? `Updating ${u.percent || 0}%` : 'Update available';
+
+  const status = {
+    unsupported: 'Updates are available in the installed Windows app.',
+    idle: 'Not checked yet.',
+    checking: 'Checking for updates…',
+    latest: '✓ You have the latest version.',
+    available: `New version ${u.version} is available.`,
+    downloading: `Downloading version ${u.version}… ${u.percent || 0}%`,
+    ready: `Version ${u.version} is ready. Restart Forge to finish.`,
+    error: u.error || 'Update check failed.',
+  }[u.state];
+  $('#updateStatus').textContent = status || '';
+  if (u.current) $('#appVersion').textContent = `v${u.current}`;
+
+  if (!has) $('#updatePop').hidden = true;
+  $('#upTitle').textContent = u.state === 'ready' ? 'Update ready to install' : `Forge ${u.version || ''} is out`;
+  $('#upSub').textContent = `You have v${u.current}${u.error && u.state === 'available' ? ` · ${u.error}` : ''}`;
+  $('#upNotes').textContent = u.notes || '';
+  $('#upProgress').hidden = u.state !== 'downloading';
+  $('#upProgress i').style.setProperty('--p', `${u.percent || 0}%`);
+  $('#upActions').innerHTML =
+    u.state === 'available'
+      ? '<button class="ghost" data-up="later">Later</button><button class="primary" data-up="download">⬇ Download update</button>'
+      : u.state === 'ready'
+        ? '<button class="ghost" data-up="later">Later</button><button class="primary" data-up="install">↻ Restart &amp; update</button>'
+        : '';
+
+  if (u.state === 'available' && !updateToastShown) {
+    updateToastShown = true;
+    toast(`✦ Forge ${u.version} is available. Click "Update available" at the top.`);
+  }
+}
+
+$('#updateChip').onclick = () => ($('#updatePop').hidden = !$('#updatePop').hidden);
+$('#upClose').onclick = () => ($('#updatePop').hidden = true);
+$('#upActions').addEventListener('click', (e) => {
+  const act = e.target.closest('[data-up]')?.dataset.up;
+  if (act === 'later') $('#updatePop').hidden = true;
+  if (act === 'download') forge.update.download();
+  if (act === 'install') forge.update.install();
+});
+$('#checkUpdates').onclick = () => forge.update.check().then((u) => ((update = u), renderUpdate()));
+forge.update.onState((u) => {
+  update = u;
+  renderUpdate();
+});
+
 // ---------------------------------------------------------------- boot
 (async function boot() {
   document.body.classList.add(`platform-${forge.platform}`);
   settings = await forge.settings.get();
   engineState = await forge.engine.state();
+  update = await forge.update.state();
+  renderUpdate();
   updateEngineLabels();
   renderStore();
   tickStats();

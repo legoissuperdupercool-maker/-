@@ -15,6 +15,9 @@ concurrency:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      # Every build gets a higher version, so installed copies can tell an update exists.
+      FORGE_VERSION: 0.2.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,27 +32,56 @@ jobs:
       - name: Run tests
         run: npm test
 
+      - name: Write release notes
+        shell: bash
+        run: git log -1 --pretty=%B | grep -vE '^(Co-Authored-By|Claude-Session):' > build/release-notes.md
+
       - name: Build installer
-        run: npm run dist:win
+        run: npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version=${{ env.FORGE_VERSION }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Check update files
+        shell: bash
+        run: |
+          ls -la dist
+          test -f dist/ForgeInstaller.exe
+          test -f dist/latest.yml
+          grep -q "version: ${FORGE_VERSION}" dist/latest.yml
+          cat dist/latest.yml
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ForgeInstaller
-          path: dist/ForgeInstaller.exe
+          name: ForgeInstaller-${{ env.FORGE_VERSION }}
+          path: |
+            dist/ForgeInstaller.exe
+            dist/latest.yml
           if-no-files-found: error
 
-      # A fixed "windows-latest" release gives a stable download link to the newest build.
-      - name: Publish download
+      # A fixed "windows-latest" release keeps one stable download link. Assets are replaced
+      # in place (installer first, latest.yml last) so update checks never see a half-updated release.
+      - name: Publish download and update info
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete windows-latest --yes --cleanup-tag || true
-          gh release create windows-latest dist/ForgeInstaller.exe \
-            --target "$GITHUB_SHA" \
-            --prerelease \
-            --title "Forge for Windows (latest build)" \
-            --notes "Download **ForgeInstaller.exe**, run it, and Forge appears on your desktop and in the Start menu. Built from ${GITHUB_SHA::7} on ${GITHUB_REF_NAME}. Windows may show a SmartScreen warning because the installer is not code-signed: click *More info* → *Run anyway*."
+          NOTES="**Forge ${FORGE_VERSION}**
+
+          Download **ForgeInstaller.exe**, run it, and Forge appears on your desktop and in the Start menu. Installed copies of Forge update themselves: look for the glowing *Update available* badge.
+
+          Windows may show a SmartScreen warning because the installer is not code-signed. Click *More info* → *Run anyway*.
+
+          ### What's new
+          $(cat build/release-notes.md)"
+          if gh release view windows-latest >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/windows-latest" -f sha="$GITHUB_SHA" -F force=true >/dev/null || true
+            gh release upload windows-latest dist/ForgeInstaller.exe --clobber
+            if [ -f dist/ForgeInstaller.exe.blockmap ]; then gh release upload windows-latest dist/ForgeInstaller.exe.blockmap --clobber; fi
+            gh release upload windows-latest dist/latest.yml --clobber
+            gh release edit windows-latest --title "Forge ${FORGE_VERSION} for Windows" --notes "$NOTES"
+          else
+            FILES="dist/ForgeInstaller.exe dist/latest.yml"
+            if [ -f dist/ForgeInstaller.exe.blockmap ]; then FILES="$FILES dist/ForgeInstaller.exe.blockmap"; fi
+            gh release create windows-latest $FILES --target "$GITHUB_SHA" --title "Forge ${FORGE_VERSION} for Windows" --notes "$NOTES"
+          fi

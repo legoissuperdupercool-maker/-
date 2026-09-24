@@ -54,6 +54,14 @@ contextBridge.exposeInMainWorld('forge', {
     reboot: () => call('engine:reboot'),
     onState: (cb) => on('engine:state', cb),
   },
+  update: {
+    state: () => call('update:state'),
+    check: () => call('update:check'),
+    download: () => call('update:download'),
+    install: () => call('update:install'),
+    onState: (cb) => on('update:state', cb),
+  },
+  version: () => call('app:version'),
   ollama: { models: () => call('ollama:models') },
   ai: {
     models: (form) => call('ai:models', form),
