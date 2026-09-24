@@ -37,7 +37,8 @@ jobs:
         run: git log -1 --pretty=%B | grep -vE '^(Co-Authored-By|Claude-Session):' > build/release-notes.md
 
       - name: Build installer
-        run: npx electron-builder --win nsis --x64 --publish never -c.extraMetadata.version=${{ env.FORGE_VERSION }}
+        shell: bash # PowerShell splits "-c.extraMetadata.version=…" at the dot
+        run: npx electron-builder --win nsis --x64 --publish never "--config.extraMetadata.version=${FORGE_VERSION}"
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
 
