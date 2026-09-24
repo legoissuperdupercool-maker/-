@@ -6,7 +6,7 @@
 
 ## Install on Windows 11
 
-**[Download ForgeInstaller.exe](https://github.com/legoissuperdupercool-maker/forge-releases/releases/latest/download/ForgeInstaller.exe)** (from the public [forge-releases](https://github.com/legoissuperdupercool-maker/forge-releases/releases) repo)
+**[Download ForgeInstaller.exe](https://github.com/legoissuperdupercool-maker/-/releases/download/windows-latest/ForgeInstaller.exe)**
 
 1. Run `ForgeInstaller.exe`.
 2. Windows shows *"Windows protected your PC"* because the installer isn't code-signed. Click **More info → Run anyway**.
@@ -14,11 +14,7 @@
 
 Forge updates itself. When a new version is out, a glowing **Update available** badge appears; click it, then **Restart & update**.
 
-### How releases are published
-
-This code repo is private. Every push builds the installer on a Windows runner (`.github/workflows/windows-installer.yml`), stamps it as version `0.2.<run number>`, and publishes it as a new release in the public `forge-releases` repo with `latest.yml`, which installed copies use to detect and verify updates. That needs one repo secret, `RELEASES_TOKEN`: a fine-grained personal access token with **Contents: Read and write** on `forge-releases` only.
-
-To build locally on Windows: `npm install` then `npm run dist:win`. The output is `dist\ForgeInstaller.exe`.
+Every push builds the installer on a Windows runner (`.github/workflows/windows-installer.yml`), stamps it as version `0.2.<run number>`, and replaces the files in the `windows-latest` release, including `latest.yml`, which installed copies use to detect and verify updates. To build locally on Windows: `npm install` then `npm run dist:win`. The output is `dist\ForgeInstaller.exe`.
 
 ## What it does
 

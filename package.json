@@ -81,7 +81,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://github.com/legoissuperdupercool-maker/forge-releases/releases/latest/download"
+        "url": "https://github.com/legoissuperdupercool-maker/-/releases/download/windows-latest"
       }
     ]
   },

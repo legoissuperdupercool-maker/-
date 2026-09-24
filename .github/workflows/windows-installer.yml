@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: windows-installer-${{ github.ref }}
@@ -18,8 +18,6 @@ jobs:
     env:
       # Every build gets a higher version, so installed copies can tell an update exists.
       FORGE_VERSION: 0.2.${{ github.run_number }}
-      # Step `if:` conditions can only see job-level env, so the secret is exposed here.
-      RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -62,16 +60,13 @@ jobs:
             dist/latest.yml
           if-no-files-found: error
 
-      # Installers go to the PUBLIC repo legoissuperdupercool-maker/forge-releases (this code repo
-      # is private), one release per version. Installed apps read
-      # forge-releases/releases/latest/download/latest.yml to find updates.
-      # Needs the RELEASES_TOKEN secret: a fine-grained token with Contents read/write on forge-releases.
-      - name: Publish to forge-releases
-        if: ${{ env.RELEASES_TOKEN != '' }}
+      # One fixed "windows-latest" release is both the download link and the update channel
+      # (installed apps read windows-latest/latest.yml). Assets are replaced in place, installer
+      # first and latest.yml last, so an update check never sees a half-updated release.
+      - name: Publish download and update info
         shell: bash
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
-          PUBLIC_REPO: legoissuperdupercool-maker/forge-releases
+          GH_TOKEN: ${{ github.token }}
         run: |
           cat > notes.md <<NOTES
           **Forge ${FORGE_VERSION} for Windows**
@@ -83,13 +78,14 @@ jobs:
           ### What's new
           $(cat build/release-notes.md)
           NOTES
-          FILES="dist/ForgeInstaller.exe dist/latest.yml"
-          if [ -f dist/ForgeInstaller.exe.blockmap ]; then FILES="$FILES dist/ForgeInstaller.exe.blockmap"; fi
-          # Create as a draft, upload everything, then publish, so "latest" never points at a half-uploaded release.
-          gh release create "v${FORGE_VERSION}" $FILES --repo "$PUBLIC_REPO" --draft --title "Forge ${FORGE_VERSION}" --notes-file notes.md
-          gh release edit "v${FORGE_VERSION}" --repo "$PUBLIC_REPO" --draft=false --latest
-
-      - name: Missing RELEASES_TOKEN
-        if: ${{ env.RELEASES_TOKEN == '' }}
-        shell: bash
-        run: echo "::warning::RELEASES_TOKEN secret is not set, so this build was not published to forge-releases. The installer is attached to this run as an artifact."
+          if gh release view windows-latest >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/tags/windows-latest" -f sha="$GITHUB_SHA" -F force=true >/dev/null || true
+            gh release upload windows-latest dist/ForgeInstaller.exe --clobber
+            if [ -f dist/ForgeInstaller.exe.blockmap ]; then gh release upload windows-latest dist/ForgeInstaller.exe.blockmap --clobber; fi
+            gh release upload windows-latest dist/latest.yml --clobber
+            gh release edit windows-latest --title "Forge ${FORGE_VERSION} for Windows" --notes-file notes.md --prerelease=false --latest
+          else
+            FILES="dist/ForgeInstaller.exe dist/latest.yml"
+            if [ -f dist/ForgeInstaller.exe.blockmap ]; then FILES="$FILES dist/ForgeInstaller.exe.blockmap"; fi
+            gh release create windows-latest $FILES --target "$GITHUB_SHA" --title "Forge ${FORGE_VERSION} for Windows" --notes-file notes.md --latest
+          fi
