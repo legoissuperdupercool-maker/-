@@ -9,7 +9,8 @@
     "start": "electron .",
     "test": "node --test test/*.test.js",
     "rebuild": "electron-rebuild -f -w node-pty",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "dist:win": "electron-builder --win nsis --x64 --publish never"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
@@ -28,27 +29,57 @@
   "build": {
     "appId": "app.forge.commandcenter",
     "productName": "Forge",
+    "copyright": "Forge",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
     "files": [
       "src/**/*",
-      "node_modules/**/*",
+      "build/icon.png",
       "package.json"
     ],
     "asarUnpack": [
       "node_modules/node-pty/**/*"
     ],
+    "npmRebuild": false,
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "executableName": "Forge"
+    },
+    "nsis": {
+      "artifactName": "ForgeInstaller.exe",
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Forge",
+      "uninstallDisplayName": "Forge",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
     },
     "mac": {
       "target": "dmg",
+      "icon": "build/icon.png",
       "category": "public.app-category.developer-tools"
     },
     "linux": {
       "target": "AppImage",
+      "icon": "build/icon.png",
       "category": "Development"
     }
   },
   "engines": {
     "node": ">=20"
-  }
+  },
+  "author": "Forge"
 }

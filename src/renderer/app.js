@@ -723,6 +723,7 @@ $('#resetChat').onclick = resetChat;
 
 // ---------------------------------------------------------------- boot
 (async function boot() {
+  document.body.classList.add(`platform-${forge.platform}`);
   settings = await forge.settings.get();
   updateEngineLabels();
   renderStore();

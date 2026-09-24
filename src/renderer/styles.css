@@ -303,6 +303,15 @@ pre.code:hover .copy { opacity: 1; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 60; padding: 10px 16px; border-radius: 12px; background: rgba(20, 22, 34, 0.95); border: 1px solid var(--line-2); font-size: 13px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); animation: fadeUp 0.25s ease; }
 .toast.err { border-color: rgba(255,77,109,0.5); color: #ff9db0; }
 
+/* Windows: native window buttons float over the top-right corner (titleBarOverlay). */
+.platform-win32 .agent { padding-top: 34px; }
+.platform-win32 .agent::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 34px; -webkit-app-region: drag; }
+.platform-win32 .rail { -webkit-app-region: drag; }
+.platform-win32 .rail button { -webkit-app-region: no-drag; }
+.agent { position: relative; }
+/* macOS: leave room for the traffic lights. */
+.platform-darwin .rail { padding-top: 40px; }
+
 @media (max-width: 1280px) {
   .app { grid-template-columns: 76px minmax(0, 1fr) 360px; }
   .gauges { grid-template-columns: repeat(2, 1fr); }

@@ -27,7 +27,9 @@ function createWindow() {
     minHeight: 680,
     backgroundColor: '#07080d',
     title: 'Forge',
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
+    titleBarStyle: process.platform === 'linux' ? 'default' : process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
+    ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#0b0c14', symbolColor: '#8a90a8', height: 34 } } : {}),
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

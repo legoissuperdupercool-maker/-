@@ -4,6 +4,15 @@
 
 ![Dashboard](docs/dashboard.png)
 
+## Install on Windows 11
+
+1. Go to this repo's **Releases** and open **Forge for Windows (latest build)**.
+2. Download **`ForgeInstaller.exe`** and run it.
+3. Windows shows *"Windows protected your PC"* because the installer isn't code-signed. Click **More info → Run anyway**.
+4. Choose a folder and click **Install**. **Forge** appears on your desktop and in the Start menu.
+
+Every push rebuilds the installer automatically (see `.github/workflows/windows-installer.yml`). You can also build it yourself on Windows with `npm install` then `npm run dist:win`; the output is `dist\ForgeInstaller.exe`.
+
 ## What it does
 
 | | |
