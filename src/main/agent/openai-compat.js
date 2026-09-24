@@ -118,6 +118,7 @@ class ProviderError extends Error {
   }
 }
 
+const TEMPLATE_ERR = /failed to template|harmony|chat template|render tokens/i;
 const MODEL_ERR = /model.{0,60}(not found|does not exist|decommissioned|deprecated|not supported|unsupported|no longer|not available|not a valid|invalid)|does not support chat|chat completions? (are |is )?not supported|not supported for chat|no endpoints found|invalid model/i;
 const TOOL_ERR = /tool_use_failed|failed to call a function|failed to parse tool|tool call validation|invalid tool call/i;
 
@@ -140,7 +141,7 @@ function toProviderError(cfg, status, body) {
   }
   if (status === 429) return new ProviderError(`${label} free-tier rate limit hit. Wait a minute, or pick a different model or engine.`, 'rate');
   if (code === 'tool_use_failed' || TOOL_ERR.test(msg)) return new ProviderError(`${label}: the model sent a broken tool call (${msg})`, 'tool');
-  if (code === 'model_not_found' || code === 'model_decommissioned' || MODEL_ERR.test(msg) || (status === 404 && !cfg.pullHint)) {
+  if (code === 'model_not_found' || code === 'model_decommissioned' || MODEL_ERR.test(msg) || TEMPLATE_ERR.test(msg) || (status === 404 && !cfg.pullHint)) {
     return new ProviderError(`${label} can't use model "${cfg.model}": ${msg}`, 'model');
   }
   if (status === 404 && cfg.pullHint) return new ProviderError(cfg.pullHint, 'model');
@@ -288,7 +289,7 @@ class OpenAICompatEngine {
         role: 'assistant',
         content: content || null,
         ...(calls.length
-          ? { tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name, arguments: c.arguments || '{}' } })) }
+          ? { tool_calls: calls.map((c) => ({ id: c.id, type: 'function', function: { name: c.name || 'unknown_tool', arguments: c.arguments || '{}' } })) }
           : {}),
       });
       if (!calls.length) return;
@@ -310,7 +311,8 @@ class OpenAICompatEngine {
               : await executeTool(c.name, input, h.toolCtx(c.id));
           h.emit({ type: 'tool-result', id: c.id, content: result.content, isError: result.isError });
         }
-        this.history.push({ role: 'tool', tool_call_id: c.id, content: result.content });
+        // `name` is required by some templates (e.g. gpt-oss "harmony" on Groq: "Tools should have a name!").
+        this.history.push({ role: 'tool', tool_call_id: c.id, name: c.name || 'unknown_tool', content: result.content });
       }
       if (h.signal.aborted) return;
     }

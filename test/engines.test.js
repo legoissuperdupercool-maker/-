@@ -69,6 +69,7 @@ test('OpenAI-compatible engine: tool call then answer', async () => {
   assert.match(result.content, /hi-from-tool/);
   const toolMsg = bodies[1].body.messages.find((m) => m.role === 'tool');
   assert.strictEqual(toolMsg.tool_call_id, 'call_1');
+  assert.strictEqual(toolMsg.name, 'run_command'); // gpt-oss/harmony templates need it
   assert.deepStrictEqual(engine.history.map((m) => m.role), ['user', 'assistant', 'tool', 'assistant']);
 });
 

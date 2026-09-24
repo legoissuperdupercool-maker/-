@@ -28,6 +28,7 @@ test('provider errors are classified', () => {
   assert.strictEqual(toProviderError(cfg, 400, '{"error":{"message":"Failed to call a function. Please adjust your prompt.","code":"tool_use_failed"}}').kind, 'tool');
   assert.strictEqual(toProviderError(cfg, 401, '{"error":{"message":"Invalid API Key","code":"invalid_api_key"}}').kind, 'auth');
   assert.strictEqual(toProviderError(cfg, 429, '{}').kind, 'rate');
+  assert.strictEqual(toProviderError(cfg, 400, '{"error":{"message":"failed to template request: failed to render tokenized output: failed to render tokens with harmony: HarmonyError: EncodingError: Message=render failed: Tools should have a name!"}}').kind, 'model');
 });
 
 // Fake Groq: /models lists GROQ_MODELS; chat behaviour is scripted per call.
