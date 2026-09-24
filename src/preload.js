@@ -48,5 +48,9 @@ contextBridge.exposeInMainWorld('forge', {
     onEvent: (cb) => on('agent:event', cb),
   },
   ollama: { models: () => call('ollama:models') },
+  ai: {
+    models: (form) => call('ai:models', form),
+    test: (form) => call('ai:test', form),
+  },
   openExternal: (url) => call('open:external', url),
 });

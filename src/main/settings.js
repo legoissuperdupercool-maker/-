@@ -7,19 +7,19 @@ const FREE_PRESETS = {
   groq: {
     label: 'Groq',
     baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
+    suggested: 'openai/gpt-oss-120b, llama-3.3-70b-versatile, moonshotai/kimi-k2-instruct',
     keyUrl: 'https://console.groq.com/keys',
   },
   openrouter: {
     label: 'OpenRouter',
     baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
+    suggested: 'any model ending in :free with tool support',
     keyUrl: 'https://openrouter.ai/keys',
   },
   gemini: {
     label: 'Google Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.5-flash',
+    suggested: 'gemini-2.5-flash',
     keyUrl: 'https://aistudio.google.com/apikey',
   },
 };
@@ -28,7 +28,7 @@ const DEFAULTS = {
   provider: 'free', // 'claude' (paid API), 'free' (free cloud API) or 'ollama' (local)
   claudeModel: 'claude-opus-5',
   freePreset: 'groq',
-  freeModel: FREE_PRESETS.groq.model,
+  freeModel: '', // '' = auto: pick the best tool-capable model the key can use
   ollamaUrl: 'http://127.0.0.1:11434',
   ollamaModel: 'qwen3:8b',
   autoApproveReadOnly: true,
@@ -83,12 +83,13 @@ class Settings {
     return this.getSecret('claude') || process.env.ANTHROPIC_API_KEY || null;
   }
 
-  freeConfig() {
-    const preset = FREE_PRESETS[this.data.freePreset] || FREE_PRESETS.groq;
+  freeConfig(overrides = {}) {
+    const presetId = overrides.freePreset || this.data.freePreset;
+    const preset = FREE_PRESETS[presetId] || FREE_PRESETS.groq;
     return {
       ...preset,
-      model: this.data.freeModel || preset.model,
-      apiKey: this.getSecret(this.data.freePreset),
+      model: overrides.freeModel ?? this.data.freeModel ?? '',
+      apiKey: overrides.apiKey || this.getSecret(presetId),
     };
   }
 

@@ -452,7 +452,7 @@ function updateEngineLabels() {
   const p = settings.provider;
   let detail = '';
   if (p === 'claude') detail = settings.claudeModel;
-  if (p === 'free') detail = `${settings.freePresets[settings.freePreset]?.label} · ${settings.freeModel}`;
+  if (p === 'free') detail = `${settings.freePresets[settings.freePreset]?.label} · ${settings.freeModel || 'auto model'}`;
   if (p === 'ollama') detail = settings.ollamaModel;
   $('#engineLabel').textContent = `${ENGINE_NAMES[p]} · ${detail}`;
   $('#engineChip span').textContent = ENGINE_NAMES[p];
@@ -466,8 +466,10 @@ async function loadSettingsForm() {
   const sel = $('#freePreset');
   sel.innerHTML = Object.entries(settings.freePresets).map(([k, v]) => `<option value="${k}">${esc(v.label)}</option>`).join('');
   sel.value = settings.freePreset;
-  $('#freeModel').value = settings.freeModel;
+  setModelOptions([], settings.freeModel);
   keyState($('#freeKeyState'), settings.hasKey[settings.freePreset]);
+  $('#testResult').textContent = '';
+  if (settings.hasKey[settings.freePreset]) loadFreeModels();
   $('#claudeModel').value = settings.claudeModel;
   keyState($('#claudeKeyState'), settings.hasKey.claude);
   $('#ollamaUrl').value = settings.ollamaUrl;
@@ -485,10 +487,64 @@ $('#engines').addEventListener('click', (e) => {
   const b = e.target.closest('.engine');
   if (b) selectEngine(b.dataset.engine);
 });
+// Unsaved form values, so models can be listed and tested before pressing Save.
+function freeForm() {
+  return { freePreset: $('#freePreset').value, freeModel: $('#freeModel').value, apiKey: $('#freeKey').value.trim() || undefined };
+}
+
+function setModelOptions(models, selected) {
+  const sel = $('#freeModel');
+  const list = selected && !models.includes(selected) ? [selected, ...models] : models;
+  sel.innerHTML =
+    '<option value="">Auto: best available model</option>' +
+    list.map((m) => `<option value="${esc(m)}">${esc(m)}${m === models[0] ? '  ★ recommended' : ''}</option>`).join('');
+  sel.value = selected || '';
+}
+
+async function loadFreeModels() {
+  const state = $('#freeModelState');
+  const keep = $('#freeModel').value;
+  state.className = 'keystate';
+  state.textContent = 'loading…';
+  try {
+    const models = await forge.ai.models(freeForm());
+    setModelOptions(models, keep);
+    state.textContent = `● ${models.length} chat models with tool support`;
+    state.classList.add('ok');
+    if (keep && !models.includes(keep)) {
+      state.textContent = `⚠ "${keep}" isn't available any more. Choose another, or use Auto.`;
+      state.className = 'keystate';
+    }
+  } catch (e) {
+    state.textContent = `○ ${e.message}`;
+  }
+}
+
 $('#freePreset').onchange = (e) => {
-  const p = settings.freePresets[e.target.value];
-  $('#freeModel').value = p.model;
   keyState($('#freeKeyState'), settings.hasKey[e.target.value]);
+  setModelOptions([], '');
+  $('#freeModelState').textContent = '';
+  $('#testResult').textContent = '';
+  if (settings.hasKey[e.target.value]) loadFreeModels();
+};
+$('#loadModels').onclick = (e) => {
+  e.preventDefault();
+  loadFreeModels();
+};
+$('#testFree').onclick = async (e) => {
+  e.preventDefault();
+  const out = $('#testResult');
+  out.className = 'test-result';
+  out.textContent = 'Testing…';
+  try {
+    const r = await forge.ai.test(freeForm());
+    setModelOptions(r.models, $('#freeModel').value);
+    out.textContent = `✓ Works! ${r.model} answered with tools enabled. Press Save.`;
+    out.classList.add('ok');
+  } catch (err) {
+    out.textContent = `✗ ${err.message}`;
+    out.classList.add('err');
+  }
 };
 $('#getFreeKey').onclick = () => forge.openExternal(settings.freePresets[$('#freePreset').value].keyUrl);
 $('#getClaudeKey').onclick = () => forge.openExternal('https://console.anthropic.com/settings/keys');
@@ -501,7 +557,7 @@ $('#saveSettings').onclick = async () => {
   settings = await forge.settings.update({
     provider: selectedEngine,
     freePreset: $('#freePreset').value,
-    freeModel: $('#freeModel').value.trim(),
+    freeModel: $('#freeModel').value,
     claudeModel: $('#claudeModel').value,
     ollamaUrl: $('#ollamaUrl').value.trim(),
     ollamaModel: $('#ollamaModel').value.trim(),
@@ -654,6 +710,18 @@ forge.agent.onEvent((evt) => {
       scrollDown();
       break;
     }
+    case 'retract':
+      // a failed attempt is being retried: drop its partial output
+      if (aiEl) aiEl.remove();
+      aiEl = null;
+      aiText = '';
+      if (thinkEl) thinkEl.remove();
+      thinkEl = null;
+      break;
+    case 'model-changed':
+      settings.freeModel = evt.model;
+      updateEngineLabels();
+      break;
     case 'notice':
       endStreamingText();
       append(Object.assign(document.createElement('div'), { className: 'notice', textContent: evt.text }));

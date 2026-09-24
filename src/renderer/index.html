@@ -118,10 +118,13 @@
             <label>Provider
               <select id="freePreset"></select>
             </label>
-            <label>Model <input id="freeModel" class="mono" spellcheck="false" /></label>
             <label>API key <span class="keystate" id="freeKeyState"></span>
               <div class="row"><input id="freeKey" type="password" placeholder="Paste your free key" class="mono" /><button class="ghost" id="getFreeKey">Get a free key ↗</button></div>
             </label>
+            <label>Model <span class="keystate" id="freeModelState"></span>
+              <div class="row"><select id="freeModel" class="mono"><option value="">Auto: best available model</option></select><button class="ghost" id="loadModels">↻ Load models</button></div>
+            </label>
+            <div class="row"><button class="ghost" id="testFree">⚡ Test connection</button><span class="test-result" id="testResult"></span></div>
           </div>
 
           <div class="card form" data-for="ollama">

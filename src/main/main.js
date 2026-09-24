@@ -5,7 +5,7 @@ const { Settings } = require('./settings');
 const { PtyManager } = require('./pty');
 const { Agent } = require('./agent');
 const { CATALOG } = require('./catalog');
-const { listOllamaModels } = require('./agent/openai-compat');
+const { listOllamaModels, fetchModels, testConnection } = require('./agent/openai-compat');
 const docker = require('./docker');
 const stats = require('./stats');
 
@@ -95,6 +95,9 @@ app.whenReady().then(() => {
   ipcMain.on('agent:approve', (_e, { id, approved }) => agent.resolveApproval(id, Boolean(approved)));
 
   handle('ollama:models', () => listOllamaModels(settings.data.ollamaUrl));
+  // Settings screen: `form` carries unsaved values (preset, model, key) so they can be tried before saving.
+  handle('ai:models', (form = {}) => fetchModels({ ...settings.freeConfig(form), needsKey: true }));
+  handle('ai:test', (form = {}) => testConnection({ ...settings.freeConfig(form), needsKey: true }));
   handle('open:external', (url) => {
     if (/^https?:\/\//.test(url)) return shell.openExternal(url);
     throw new Error('only http(s) links can be opened');

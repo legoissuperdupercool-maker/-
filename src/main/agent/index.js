@@ -11,7 +11,15 @@ class Agent {
     this.controller = null;
     this.engines = {
       claude: new ClaudeEngine(settings),
-      free: new OpenAICompatEngine(() => ({ ...settings.freeConfig(), needsKey: true })),
+      free: new OpenAICompatEngine(() => ({
+        ...settings.freeConfig(),
+        needsKey: true,
+        // Remember a model that was picked automatically so the next chat starts with it.
+        onModelChange: (model) => {
+          settings.update({ freeModel: model });
+          emit({ type: 'model-changed', model });
+        },
+      })),
       ollama: new OpenAICompatEngine(() => {
         const url = settings.data.ollamaUrl.replace(/\/$/, '');
         const model = settings.data.ollamaModel;
