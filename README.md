@@ -19,7 +19,7 @@ Every push rebuilds the installer automatically (see `.github/workflows/windows-
 |---|---|
 | **Command Center** | Live CPU / RAM / disk / temperature gauges, a streaming load chart, per-core heatmap, network speed, top processes |
 | **Terminal** | Real shell tabs (PowerShell on Windows, your `$SHELL` on Mac/Linux) |
-| **Home Server** | Every Docker container with live CPU/RAM, ports, logs, start / stop / restart / remove |
+| **Home Server** | Built-in server engine (no Docker Desktop needed). Every container with live CPU/RAM, ports, logs, start / stop / restart / remove |
 | **App Store** | One-click installs: Minecraft server, Jellyfin, Pi-hole, Uptime Kuma, Home Assistant, VS Code Server, Ollama, Nextcloud |
 | **Forge AI** | Chat with an agent that reads your stats, containers and logs, runs commands and installs apps. Every change shows an **Approve / Deny** card first |
 
@@ -31,6 +31,16 @@ Try asking it:
 - *"What's eating my disk space?"*
 
 ![AI agent diagnosing a crashed container](docs/server-agent.png)
+
+## Built-in server engine
+
+On Windows, Forge runs its own server engine, so you don't install Docker Desktop. The first time you open the **Server** tab, click **Set up server engine**:
+
+1. If Windows' built-in Linux support (WSL2) is off, Forge turns it on. Windows asks for admin permission, and may need one restart.
+2. Forge creates a tiny private Linux environment called `forge-engine` (Alpine Linux, about 3 MB, checksum-verified) and installs the open-source Docker Engine inside it.
+3. From then on, the engine starts automatically whenever Forge opens. Closing the window keeps your servers running in the system tray; **Quit** from the tray stops them. Containers come back the next time Forge starts.
+
+If Docker Desktop is already running, Forge uses that instead. The engine's API listens only on `127.0.0.1:23750` on your PC.
 
 ## Pick your AI engine (Settings)
 
@@ -46,7 +56,7 @@ API keys are encrypted with your OS keychain (Windows DPAPI, macOS Keychain, lib
 
 ## Run it
 
-You need [Node.js 20+](https://nodejs.org). For the Home Server features you also need [Docker Desktop](https://www.docker.com/products/docker-desktop/) (Windows/Mac) or Docker Engine (Linux).
+You need [Node.js 20+](https://nodejs.org). On Mac/Linux the Home Server features use your installed Docker.
 
 ```bash
 npm install

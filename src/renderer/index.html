@@ -93,9 +93,13 @@
           <div class="row"><button class="ghost" data-ask="Check all my containers. Are any unhealthy, crash-looping or using too many resources? Look at logs where needed.">✦ AI health check</button><button class="primary" data-goto="store">+ Install app</button></div>
         </div>
         <div class="containers" id="containers"></div>
-        <div class="empty card" id="dockerMissing" hidden>
-          <h3>Docker isn't running</h3>
-          <p>Forge manages your home server through Docker. Install <a href="https://www.docker.com/products/docker-desktop/" target="_blank" rel="noreferrer">Docker Desktop</a> (Windows/Mac) or Docker Engine (Linux), start it, and this page comes alive.</p>
+        <div class="card engine-card" id="engineCard" hidden>
+          <div class="engine-ico"><svg viewBox="0 0 40 40"><path d="M20 2 36 11v18L20 38 4 29V11z" fill="none" stroke="url(#lg)" stroke-width="2.5"/><path d="M12 15h16v4H12zm0 7h16v4H12z" fill="url(#lg)" opacity=".9"/></svg></div>
+          <h3 id="engineTitle">Server engine</h3>
+          <p id="engineText"></p>
+          <div class="engine-progress" id="engineProgress" hidden><i></i></div>
+          <div class="engine-log mono" id="engineLog"></div>
+          <div class="row center" id="engineActions"></div>
         </div>
       </section>
 

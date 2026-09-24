@@ -47,6 +47,13 @@ contextBridge.exposeInMainWorld('forge', {
     approve: (id, approved) => ipcRenderer.send('agent:approve', { id, approved }),
     onEvent: (cb) => on('agent:event', cb),
   },
+  engine: {
+    state: () => call('engine:state'),
+    detect: () => call('engine:detect'),
+    setup: () => call('engine:setup'),
+    reboot: () => call('engine:reboot'),
+    onState: (cb) => on('engine:state', cb),
+  },
   ollama: { models: () => call('ollama:models') },
   ai: {
     models: (form) => call('ai:models', form),

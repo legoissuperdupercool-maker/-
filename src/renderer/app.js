@@ -207,13 +207,15 @@ async function refreshDocker() {
     st = { available: false, error: e.message };
   }
   dockerOk = st.available;
-  $('.led', chip).className = `led ${st.available ? 'on' : 'off'}`;
-  $('span', chip).textContent = st.available ? `Docker ${st.version}` : 'Docker offline';
-  $('#dockerMissing').hidden = st.available;
+  const busyEngine = ['checking', 'starting', 'installing'].includes(engineState.phase);
+  $('.led', chip).className = `led ${st.available ? 'on' : busyEngine ? 'warn' : 'off'}`;
+  $('span', chip).textContent = st.available ? `Server engine ${st.version}` : busyEngine ? 'Engine starting…' : 'Engine offline';
+  $('#engineCard').hidden = st.available;
   if (!st.available) {
     $('#containers').innerHTML = '';
-    $('#serverSummary').textContent = st.error;
-    $('#miniContainers').innerHTML = `<div class="muted">${esc(st.error)}. Install Docker to host apps.</div>`;
+    $('#serverSummary').textContent = '';
+    $('#miniContainers').innerHTML = `<div class="muted">${busyEngine ? 'Server engine is starting…' : 'Server engine is off. <a href="#" data-goto="server">Set it up →</a>'}</div>`;
+    renderEngine();
     return;
   }
   if (currentView !== 'server' && currentView !== 'dashboard') return;
@@ -264,6 +266,87 @@ function containerCard(c) {
     </div>
   </div>`;
 }
+
+// ---------------------------------------------------------------- server engine
+let engineState = { phase: 'checking' };
+let engineLog = '';
+
+function renderEngine() {
+  const st = engineState;
+  const card = $('#engineCard');
+  const working = ['checking', 'starting', 'installing'].includes(st.phase);
+  card.classList.toggle('working', working);
+  $('#engineProgress').hidden = !working;
+  $('#engineLog').textContent = st.phase === 'installing' ? engineLog : '';
+  const btn = (label, action, cls = 'primary') => `<button class="${cls}" data-engine-act="${action}">${label}</button>`;
+  let title = 'Server engine';
+  let text = '';
+  let actions = '';
+  switch (st.phase) {
+    case 'checking':
+    case 'starting':
+      title = 'Starting your server engine…';
+      text = 'Waking up Forge\'s built-in Docker engine. This takes a few seconds.';
+      break;
+    case 'needs-setup':
+      title = 'Set up your server engine';
+      text = `Forge has a <b>built-in server engine</b> that runs Minecraft, Jellyfin and every other app in the App Store. It's a one-time setup of about 2 minutes, and you don't need to install anything else.${
+        st.wsl === false ? '<br><br>Windows will ask for <b>admin permission</b> to turn on its built-in Linux support (WSL), and may need <b>one restart</b>.' : ''
+      }`;
+      actions = btn('⚡ Set up server engine', 'setup');
+      break;
+    case 'installing':
+      title = 'Setting up your server engine…';
+      text = esc(st.step || 'Working…');
+      break;
+    case 'needs-reboot':
+      title = 'Restart to finish setup';
+      text = 'Windows turned on its Linux support. It needs <b>one restart</b> to finish. Open Forge again afterwards and setup continues automatically.';
+      actions = btn('Restart now', 'reboot') + btn('Later', 'later', 'ghost');
+      break;
+    case 'stopped':
+      title = 'Server engine stopped';
+      text = 'Start it again to bring your servers back.';
+      actions = btn('Start engine', 'start');
+      break;
+    case 'unsupported':
+      title = 'Docker needed';
+      text = 'On Mac and Linux, Forge uses Docker directly. Install <a href="https://docs.docker.com/engine/install/" target="_blank" rel="noreferrer">Docker</a>, start it, and this page comes alive.';
+      actions = btn('Check again', 'start', 'ghost');
+      break;
+    case 'error':
+      title = 'Something went wrong';
+      text = esc(st.error || 'Unknown error');
+      actions = btn('Try again', 'setup') + btn('Ask AI to help', 'ask', 'ghost');
+      break;
+    default:
+      break;
+  }
+  $('#engineTitle').textContent = title;
+  $('#engineText').innerHTML = text;
+  $('#engineActions').innerHTML = actions;
+}
+
+$('#engineActions').addEventListener('click', async (e) => {
+  const act = e.target.closest('[data-engine-act]')?.dataset.engineAct;
+  if (!act) return;
+  if (act === 'setup') forge.engine.setup().catch((err) => toast(err.message, true));
+  if (act === 'start') forge.engine.detect().catch((err) => toast(err.message, true));
+  if (act === 'later') toast('Restart whenever you are ready, then open Forge.');
+  if (act === 'ask') sendPrompt(`Forge's server engine setup failed with: "${engineState.error}". Help me diagnose and fix it (check WSL with "wsl --status" and "wsl -l -v").`);
+  if (act === 'reboot' && confirm('Restart your PC now? Save your work first.')) forge.engine.reboot();
+});
+
+forge.engine.onState((st) => {
+  if (st.log) {
+    engineLog = st.log;
+    if (currentView === 'server') $('#engineLog').textContent = engineLog;
+    return;
+  }
+  engineState = st;
+  if (st.phase !== 'installing') engineLog = '';
+  refreshDocker();
+});
 
 $('#containers').addEventListener('click', async (e) => {
   const card = e.target.closest('.ct');
@@ -331,7 +414,10 @@ $('#store').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-install]');
   if (!btn) return;
   const card = btn.closest('.app-card');
-  if (dockerOk === false) return toast('Start Docker first. See the Server tab.', true);
+  if (dockerOk === false) {
+    show('server');
+    return toast('Set up the server engine first. It only takes a minute.', true);
+  }
   btn.disabled = true;
   btn.textContent = 'Installing…';
   try {
@@ -793,6 +879,7 @@ $('#resetChat').onclick = resetChat;
 (async function boot() {
   document.body.classList.add(`platform-${forge.platform}`);
   settings = await forge.settings.get();
+  engineState = await forge.engine.state();
   updateEngineLabels();
   renderStore();
   tickStats();

@@ -2,7 +2,17 @@
 const Docker = require('dockerode');
 const { CATALOG, getApp, buildContainerConfig } = require('./catalog');
 
-const docker = new Docker(); // default socket: /var/run/docker.sock, or the named pipe on Windows
+// Default: /var/run/docker.sock, or Docker Desktop's named pipe on Windows. The built-in
+// engine (engine.js) switches this to its own localhost port with useEngine().
+let docker = new Docker();
+
+function useDefault() {
+  docker = new Docker();
+}
+
+function useEngine({ host, port }) {
+  docker = new Docker({ host, port, protocol: 'http' });
+}
 
 function cpuPercent(s) {
   const cpuDelta = s.cpu_stats.cpu_usage.total_usage - (s.precpu_stats.cpu_usage?.total_usage || 0);
@@ -13,10 +23,14 @@ function cpuPercent(s) {
 
 async function status() {
   try {
-    const v = await docker.version();
+    const v = await Promise.race([
+      docker.version(),
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('timeout'), { code: 'ETIMEDOUT' })), 4000).unref()),
+    ]);
     return { available: true, version: v.Version, os: v.Os };
   } catch (e) {
-    return { available: false, error: e.code === 'ENOENT' || e.code === 'ECONNREFUSED' ? 'Docker is not running' : e.message };
+    const down = ['ENOENT', 'ECONNREFUSED', 'ETIMEDOUT', 'ECONNRESET', 'EPIPE'].includes(e.code);
+    return { available: false, error: down ? 'Server engine is not running' : e.message };
   }
 }
 
@@ -105,4 +119,4 @@ async function install(appId, overrides = {}, onProgress = () => {}) {
   return { id: container.id.slice(0, 12), name: `forge-${app.id}`, url: app.url };
 }
 
-module.exports = { status, listContainers, logs, action, install, demux, cpuPercent };
+module.exports = { status, listContainers, logs, action, install, demux, cpuPercent, useDefault, useEngine };

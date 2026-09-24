@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, safeStorage, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, safeStorage, shell, nativeTheme, Tray, Menu, Notification } = require('electron');
 const path = require('path');
 const { Settings } = require('./settings');
 const { PtyManager } = require('./pty');
@@ -8,11 +8,18 @@ const { CATALOG } = require('./catalog');
 const { listOllamaModels, fetchModels, testConnection } = require('./agent/openai-compat');
 const docker = require('./docker');
 const stats = require('./stats');
+const { Engine } = require('./engine');
 
 let win;
 let settings;
 let ptys;
 let agent;
+let engine;
+let tray;
+let quitting = false;
+let trayHintShown = false;
+
+const ICON = path.join(__dirname, '..', '..', 'build', 'icon.png');
 
 function send(channel, payload) {
   if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
@@ -27,7 +34,7 @@ function createWindow() {
     minHeight: 680,
     backgroundColor: '#07080d',
     title: 'Forge',
-    icon: path.join(__dirname, '..', '..', 'build', 'icon.png'),
+    icon: ICON,
     titleBarStyle: process.platform === 'linux' ? 'default' : process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     ...(process.platform === 'win32' ? { titleBarOverlay: { color: '#0b0c14', symbolColor: '#8a90a8', height: 34 } } : {}),
     autoHideMenuBar: true,
@@ -40,6 +47,17 @@ function createWindow() {
     },
   });
   win.once('ready-to-show', () => win.show());
+
+  // While Forge's own server engine runs, closing the window keeps servers up in the tray.
+  win.on('close', (e) => {
+    if (quitting || !engine?.ownsEngine) return;
+    e.preventDefault();
+    win.hide();
+    if (!trayHintShown && Notification.isSupported()) {
+      trayHintShown = true;
+      new Notification({ title: 'Forge is still running', body: 'Your servers keep running. Right-click the Forge tray icon to quit.', icon: ICON }).show();
+    }
+  });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
   // Links open in the real browser, never inside the app.
@@ -60,7 +78,33 @@ function handle(channel, fn) {
   });
 }
 
+function showWindow() {
+  if (!win || win.isDestroyed()) createWindow();
+  else {
+    win.show();
+    win.focus();
+  }
+}
+
+function createTray() {
+  tray = new Tray(ICON);
+  tray.setToolTip('Forge');
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: 'Open Forge', click: showWindow },
+      { type: 'separator' },
+      { label: 'Quit Forge (stops servers)', click: () => app.quit() },
+    ]),
+  );
+  tray.on('click', showWindow);
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) app.quit();
+app.on('second-instance', showWindow);
+
 app.whenReady().then(() => {
+  if (!gotLock) return;
   settings = new Settings(app.getPath('userData'), safeStorage);
   ptys = new PtyManager(send);
   agent = new Agent(settings, (evt) => send('agent:event', evt));
@@ -79,6 +123,16 @@ app.whenReady().then(() => {
     docker.install(appId, overrides, (p) => send('docker:progress', { appId, ...p })),
   );
   handle('catalog:list', () => CATALOG);
+
+  engine = new Engine({ dataDir: app.getPath('userData'), docker, emit: (st) => send('engine:state', st) });
+  handle('engine:state', () => engine.state);
+  handle('engine:detect', () => engine.detect());
+  handle('engine:setup', () => engine.setup());
+  handle('engine:reboot', () => {
+    require('child_process').execFile('shutdown.exe', ['/r', '/t', '5', '/c', 'Restarting to finish setting up the Forge server engine']);
+    return true;
+  });
+  engine.detect().catch(() => {});
 
   handle('pty:create', (cols, rows) => ptys.create(cols, rows));
   ipcMain.on('pty:write', (_e, { id, data }) => ptys.write(id, data));
@@ -104,11 +158,21 @@ app.whenReady().then(() => {
   });
 
   createWindow();
-  app.on('activate', () => BrowserWindow.getAllWindows().length === 0 && createWindow());
+  createTray();
+  app.on('activate', showWindow);
+});
+
+app.on('before-quit', (e) => {
+  if (quitting) return;
+  quitting = true;
+  ptys?.killAll();
+  agent?.stop();
+  if (engine?.ownsEngine) {
+    e.preventDefault();
+    engine.stop().finally(() => app.quit());
+  }
 });
 
 app.on('window-all-closed', () => {
-  ptys?.killAll();
-  agent?.stop();
   if (process.platform !== 'darwin') app.quit();
 });
