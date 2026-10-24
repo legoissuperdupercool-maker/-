@@ -357,6 +357,8 @@ final class AppModel {
             : shown.categories
         shelfMovies = ContentFilter.shelf(movies, categories: categories, profile: profile)
         shelfSeries = ContentFilter.shelf(series, categories: categories, profile: profile)
+        let adultLive = Set(categories.filter { $0.kind == .live && ContentFilter.matches(ContentFilter.adult, $0.name) }.map(\.id))
+        shelfLive = live.filter { c in !(c.group.map { adultLive.contains($0) } ?? false) && !ContentFilter.matches(ContentFilter.adult, c.name) }
     }
 
     // MARK: movie & series filters
@@ -365,6 +367,8 @@ final class AppModel {
     /// countries/languages and categories. `movies` / `series` stay complete for search.
     var shelfMovies: [Channel] = []
     var shelfSeries: [Channel] = []
+    /// Live channels for Home (no adult channels; they stay in Live TV).
+    var shelfLive: [Channel] = []
 
     /// Countries and languages found in the movie and series lists, most titles first.
     var vodCountries: [CountryCount] {
@@ -456,6 +460,15 @@ final class AppModel {
     private func client(for sourceId: String) -> XtreamClient? {
         guard let source = sources.first(where: { $0.id == sourceId }), source.kind == .xtream else { return nil }
         return XtreamClient(source: source, password: Keychain.get(source.id) ?? "")
+    }
+
+    /// Movie/series details from the provider, kept for the session.
+    @ObservationIgnored private var infoCache: [String: MediaInfo] = [:]
+    func details(for item: Channel) async -> MediaInfo? {
+        if let cached = infoCache[item.id] { return cached }
+        guard !demo, let client = client(for: item.sourceId), let info = try? await client.details(item.kind, id: item.providerId) else { return nil }
+        infoCache[item.id] = info
+        return info
     }
 
     func episodes(for show: Channel) async throws -> [Episode] {

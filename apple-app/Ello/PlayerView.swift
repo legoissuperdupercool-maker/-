@@ -13,6 +13,7 @@ struct PlayerView: View {
     enum Engine { case apple, vlc }
     @State private var engine: Engine?
     @State private var failure: String?
+    @State private var triedApple = false
 
     private static let vlcExtensions: Set<String> = ["mkv", "avi", "ts", "flv", "wmv", "mpg", "mpeg", "webm", "divx", "vob", "m2ts", "3gp"]
 
@@ -24,15 +25,16 @@ struct PlayerView: View {
                 case .apple:
                     ApplePlayer(url: url, start: start) { pos, dur in
                         model.saveProgress(request, position: pos, duration: dur)
-                    } onFailed: { _ in
-                        engine = .vlc // Apple's player can't open it: try VLC.
+                    } onFailed: { reason in
+                        failure = reason
                     }
                     .ignoresSafeArea()
                 case .vlc:
                     VLCPlayerScreen(url: url, title: request.title, subtitle: request.subtitle, isLive: request.isLive, start: start) { pos, dur in
                         model.saveProgress(request, position: pos, duration: dur)
                     } onFailed: { message in
-                        failure = message
+                        // VLC couldn't open it at all: let Apple's player try once.
+                        if triedApple { failure = message } else { triedApple = true; engine = .apple }
                     } onClose: { dismiss() }
                 }
             }
@@ -62,9 +64,9 @@ struct PlayerView: View {
 
     private var start: Double? { request.isLive ? nil : model.resumePosition(request.key) }
 
-    static func pick(_ url: URL) -> Engine {
-        vlcExtensions.contains(url.pathExtension.lowercased()) ? .vlc : .apple
-    }
+    /// Everything plays in VLC with ello's own controls (like the Windows app) and its
+    /// reconnect watchdog; Apple's player is the fallback.
+    static func pick(_ url: URL) -> Engine { .vlc }
 }
 
 // MARK: - Apple's player
@@ -160,23 +162,52 @@ final class VLCEngine {
     var audioIndex: Int32 = -1
     var subtitleIndex: Int32 = -1
     var failed = false
+    /// The stream dropped and is being opened again where it was.
+    var reconnecting = false
 
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private var everPlayed = false
     @ObservationIgnored private var openedAt = Date()
+    @ObservationIgnored private var url: URL?
+    @ObservationIgnored private var live = false
+    @ObservationIgnored private var userPaused = false
+    @ObservationIgnored private var lastTime: Double = -1
+    @ObservationIgnored private var lastAdvance = Date()
+    @ObservationIgnored private var retries = 0
 
-    func start(url: URL, at start: Double?, in view: UIView) {
-        let media = VLCMedia(url: url)
-        media.addOption(":http-user-agent=VLC/3.0.20 LibVLC/3.0.20")
-        media.addOption(":network-caching=2000")
-        if let start, start > 0 { media.addOption(":start-time=\(Int(start))") }
+    func start(url: URL, at start: Double?, live: Bool, in view: UIView) {
+        self.url = url
+        self.live = live
         player.drawable = view
-        player.media = media
-        player.play()
-        openedAt = Date()
+        open(at: start)
         timer = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.poll() }
         }
+    }
+
+    private func open(at start: Double?) {
+        guard let url else { return }
+        let media = VLCMedia(url: url)
+        media.addOption(":http-user-agent=VLC/3.0.20 LibVLC/3.0.20")
+        // A bigger buffer rides out slow moments; reconnect when the server drops the connection.
+        media.addOption(":network-caching=\(live ? 3000 : 5000)")
+        media.addOption(":http-reconnect")
+        if let start, start > 0, !live { media.addOption(":start-time=\(Int(start))") }
+        player.media = media
+        player.play()
+        openedAt = Date()
+        lastAdvance = Date()
+        lastTime = -1
+    }
+
+    /// Open the stream again where it stopped (a dropped connection or a stall).
+    private func reconnect() {
+        guard retries < 8 else { return }
+        retries += 1
+        reconnecting = true
+        let resumeAt = time > 5 ? time - 2 : time
+        player.stop()
+        open(at: live ? nil : resumeAt)
     }
 
     private func poll() {
@@ -184,12 +215,27 @@ final class VLCEngine {
         playing = player.isPlaying
         buffering = !playing && (state == .opening || state == .buffering || state == .esAdded)
         if playing { everPlayed = true }
-        time = Double(player.time.intValue) / 1000
+        let now = Double(player.time.intValue) / 1000
+        if now > 0 { time = now }
         if let len = player.media?.length.intValue, len > 0 { length = Double(len) / 1000 }
         seekable = player.isSeekable
-        if state == .error || (!everPlayed && state == .stopped && Date().timeIntervalSince(openedAt) > 3)
-            || (!everPlayed && Date().timeIntervalSince(openedAt) > 45) {
+        if !everPlayed && (state == .error || (state == .stopped && Date().timeIntervalSince(openedAt) > 3)
+            || Date().timeIntervalSince(openedAt) > 45) {
             failed = true
+        }
+        // Watchdog: once it has played, a picture that stops moving without the viewer pausing
+        // (10 s), or a stream that ends early, is opened again where it was.
+        if everPlayed {
+            if now > lastTime + 0.2 {
+                lastTime = now
+                lastAdvance = Date()
+                if reconnecting, Date().timeIntervalSince(openedAt) > 2 { reconnecting = false }
+                if retries > 0, Date().timeIntervalSince(openedAt) > 60 { retries = 0 }
+            }
+            let endedEarly = (state == .ended || state == .stopped || state == .error) && (live || length <= 0 || time < length - 20)
+            let stalled = !userPaused && Date().timeIntervalSince(lastAdvance) > 10
+            // Give a fresh connection a few seconds before judging it.
+            if Date().timeIntervalSince(openedAt) > 4, (endedEarly && !userPaused) || stalled { reconnect() }
         }
         let names = player.audioTrackNames.compactMap { $0 as? String }
         let ids = player.audioTrackIndexes.compactMap { ($0 as? NSNumber)?.int32Value }
@@ -205,9 +251,26 @@ final class VLCEngine {
         subtitleIndex = player.currentVideoSubTitleIndex
     }
 
-    func toggle() { if player.isPlaying { player.pause() } else { player.play() } }
-    func skip(_ seconds: Int32) { if seconds > 0 { player.jumpForward(seconds) } else { player.jumpBackward(-seconds) } }
+    func toggle() {
+        if player.isPlaying {
+            userPaused = true
+            player.pause()
+        } else {
+            userPaused = false
+            lastAdvance = Date()
+            // A stream that died doesn't start again with play(): open it again.
+            let state = player.state
+            if everPlayed && (state == .ended || state == .stopped || state == .error) { retries = 0; reconnect() } else { player.play() }
+        }
+    }
+    func skip(_ seconds: Int32) {
+        lastAdvance = Date()
+        lastTime = -1
+        if seconds > 0 { player.jumpForward(seconds) } else { player.jumpBackward(-seconds) }
+    }
     func seek(to fraction: Double) {
+        lastAdvance = Date()
+        lastTime = -1
         player.position = Float(min(max(fraction, 0), 0.999))
         time = fraction * length
     }
@@ -226,11 +289,12 @@ private struct VLCSurface: UIViewRepresentable {
     let engine: VLCEngine
     let url: URL
     let start: Double?
+    let live: Bool
 
     func makeUIView(context: Context) -> UIView {
         let v = UIView()
         v.backgroundColor = .black
-        engine.start(url: url, at: start, in: v)
+        engine.start(url: url, at: start, live: live, in: v)
         return v
     }
 
@@ -257,11 +321,26 @@ private struct VLCPlayerScreen: View {
 
     var body: some View {
         ZStack {
-            VLCSurface(engine: engine, url: url, start: start).ignoresSafeArea()
-            Color.black.opacity(controls ? 0.35 : 0.001).ignoresSafeArea()
-                .onTapGesture { if controls { controls = false } else { reveal() } }
-            if engine.buffering {
-                ProgressView().controlSize(.large).tint(.white)
+            VLCSurface(engine: engine, url: url, start: start, live: isLive).ignoresSafeArea()
+            // Shade at the top and bottom behind the controls (as on Windows).
+            ZStack {
+                Color.black.opacity(0.001)
+                if controls {
+                    VStack(spacing: 0) {
+                        LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .top, endPoint: .bottom).frame(height: 180)
+                        Spacer()
+                        LinearGradient(colors: [.clear, .black.opacity(0.85)], startPoint: .top, endPoint: .bottom).frame(height: 240)
+                    }
+                    .transition(.opacity)
+                }
+            }
+            .ignoresSafeArea()
+            .onTapGesture { if controls { controls = false } else { reveal() } }
+            if engine.buffering || engine.reconnecting {
+                VStack(spacing: 12) {
+                    ProgressView().controlSize(.large).tint(.white)
+                    if engine.reconnecting { Text("Reconnecting…").font(.system(size: 15, weight: .medium)).foregroundStyle(.white.opacity(0.85)) }
+                }
             }
             if controls { overlay.transition(.opacity) }
         }
@@ -294,30 +373,44 @@ private struct VLCPlayerScreen: View {
     }
 
     private var overlay: some View {
-        VStack {
-            HStack(alignment: .top, spacing: 14) {
+        VStack(spacing: 0) {
+            HStack(alignment: .center, spacing: 14) {
                 Button(action: onClose) {
-                    Image(systemName: "xmark").font(.system(size: 17, weight: .bold)).frame(width: 44, height: 44)
-                        .background(.black.opacity(0.5), in: Circle())
+                    Image(systemName: "arrow.left").font(.system(size: 22, weight: .bold)).frame(width: 48, height: 48)
                 }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(.system(size: 20, weight: .semibold)).lineLimit(1)
-                    if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(.white.opacity(0.75)).lineLimit(1) }
-                }
+                if Theme.look != .theater { titleBlock(alignment: .leading) }
                 Spacer()
                 trackMenus
             }
             Spacer()
-            HStack(spacing: 56) {
+            // The centre cluster: back 10 s, play/pause, forward 10 s.
+            HStack(spacing: 64) {
                 if !isLive && engine.seekable {
-                    roundButton("gobackward.10", size: 26) { engine.skip(-10); reveal() }
+                    centerButton("gobackward.10", size: 34) { engine.skip(-10); reveal() }
                 }
-                roundButton(engine.playing ? "pause.fill" : "play.fill", size: 34) { engine.toggle(); reveal() }
+                centerButton(engine.playing ? "pause.fill" : "play.fill", size: 52) { engine.toggle(); reveal() }
                 if !isLive && engine.seekable {
-                    roundButton("goforward.10", size: 26) { engine.skip(10); reveal() }
+                    centerButton("goforward.10", size: 34) { engine.skip(10); reveal() }
                 }
             }
             Spacer()
+            bottomBar
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 20)
+    }
+
+    private func titleBlock(alignment: HorizontalAlignment) -> some View {
+        VStack(alignment: alignment, spacing: 2) {
+            Text(title).font(.system(size: Theme.look == .theater ? 18 : 20, weight: .bold)).lineLimit(1)
+            if let subtitle { Text(subtitle).font(.system(size: 14)).foregroundStyle(.white.opacity(0.75)).lineLimit(1) }
+        }
+    }
+
+    /// Seek bar and title along the bottom; Glass puts it on frosted glass.
+    @ViewBuilder private var bottomBar: some View {
+        let bar = VStack(spacing: 10) {
             if isLive {
                 HStack {
                     Label("LIVE", systemImage: "dot.radiowaves.left.and.right").font(.system(size: 13, weight: .bold))
@@ -327,15 +420,23 @@ private struct VLCPlayerScreen: View {
             } else if engine.length > 0 {
                 seekBar
             }
+            if Theme.look == .theater { titleBlock(alignment: .center).frame(maxWidth: .infinity) }
         }
-        .foregroundStyle(.white)
-        .padding(24)
+        if Theme.look == .glass {
+            bar.padding(16).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        } else {
+            bar
+        }
     }
 
-    private func roundButton(_ icon: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+    private func centerButton(_ icon: String, size: CGFloat, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Image(systemName: icon).font(.system(size: size, weight: .semibold)).frame(width: size * 2.3, height: size * 2.3)
-                .background(.black.opacity(0.45), in: Circle())
+            Image(systemName: icon).font(.system(size: size, weight: .semibold))
+                .frame(width: size * 1.9, height: size * 1.9)
+                .background {
+                    if Theme.look == .glass || Theme.look == .wonder { Circle().fill(.ultraThinMaterial) }
+                }
+                .shadow(color: .black.opacity(0.5), radius: 8)
         }
     }
 
@@ -345,8 +446,9 @@ private struct VLCPlayerScreen: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Capsule().fill(.white.opacity(0.25)).frame(height: 5)
-                    Capsule().fill(Theme.blue).frame(width: max(0, geo.size.width * fraction), height: 5)
-                    Circle().fill(.white).frame(width: dragging == nil ? 14 : 22)
+                    Capsule().fill(Theme.look == .wonder || Theme.look == .glass ? Color.white : Theme.blue)
+                        .frame(width: max(0, geo.size.width * fraction), height: 5)
+                    Circle().fill(Theme.look == .theater ? Theme.blue : .white).frame(width: dragging == nil ? 14 : 22)
                         .offset(x: geo.size.width * fraction - (dragging == nil ? 7 : 11))
                 }
                 .frame(maxHeight: .infinity)

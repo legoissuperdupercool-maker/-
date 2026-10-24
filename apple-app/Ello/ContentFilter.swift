@@ -81,11 +81,13 @@ enum ContentFilter {
     /// categories for movies and series. Search uses the full lists.
     static func shelf(_ list: [Channel], categories: [Category], profile: Profile) -> [Channel] {
         let hiddenCountries = Set(profile.vodHiddenCountries)
-        let hiddenCats = Set(profile.vodHiddenCategories)
-        if hiddenCountries.isEmpty && hiddenCats.isEmpty { return list }
-        let catCountry = categoryCountries(categories)
+        // Adult titles are never featured (as on Windows); they stay findable in search.
+        let adultCats = Set(categories.filter { matches(adult, $0.name) }.map(\.id))
+        let hiddenCats = Set(profile.vodHiddenCategories).union(adultCats)
+        let catCountry = hiddenCountries.isEmpty ? [:] : categoryCountries(categories)
         return list.filter { c in
             if let g = c.group, hiddenCats.contains(g) { return false }
+            if matches(adult, c.name) { return false }
             if !hiddenCountries.isEmpty, let code = vodCountry(c, categoryCountry: catCountry), hiddenCountries.contains(code) { return false }
             return true
         }

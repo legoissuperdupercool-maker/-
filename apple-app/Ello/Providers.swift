@@ -187,6 +187,33 @@ struct XtreamClient {
         return "\(base)/timeshift/\(enc(source.username))/\(enc(password))/\(minutes)/\(day):\(hm)/\(streamId).ts"
     }
 
+    /// Plot, cast, artwork and the rest for a movie (get_vod_info) or series (get_series_info).
+    func details(_ kind: StreamKind, id: String) async throws -> MediaInfo {
+        let root: [String: Any]?
+        if kind == .series {
+            root = try await json("get_series_info", ["series_id": id]) as? [String: Any]
+        } else {
+            root = try await json("get_vod_info", ["vod_id": id]) as? [String: Any]
+        }
+        let info = root?["info"] as? [String: Any] ?? [:]
+        let backdrops = info["backdrop_path"]
+        let backdrop = (backdrops as? [Any])?.first.flatMap { str($0) } ?? str(backdrops)
+        let released = str(info["releasedate"]) ?? str(info["releaseDate"]) ?? str(info["release_date"]) ?? str(info["year"])
+        var rating = Double(str(info["rating"]) ?? "")
+        if rating == nil || rating == 0, let five = Double(str(info["rating_5based"]) ?? "") { rating = five * 2 }
+        return MediaInfo(
+            plot: str(info["plot"]) ?? str(info["description"]),
+            cast: str(info["cast"]) ?? str(info["actors"]),
+            director: str(info["director"]),
+            genre: str(info["genre"]),
+            year: released.flatMap { r in r.range(of: #"\d{4}"#, options: .regularExpression).map { String(r[$0]) } },
+            rating: (rating ?? 0) > 0 ? rating : nil,
+            duration: str(info["duration"]) ?? (str(info["episode_run_time"]).map { "\($0) min" }),
+            backdrop: backdrop.flatMap { $0.isEmpty ? nil : $0 },
+            poster: str(info["movie_image"]) ?? str(info["cover"]) ?? str(info["cover_big"])
+        )
+    }
+
     func episodes(seriesId: String) async throws -> [Episode] {
         guard let root = try await json("get_series_info", ["series_id": seriesId]) as? [String: Any] else { return [] }
         var out: [Episode] = []
@@ -273,4 +300,17 @@ enum M3UParser {
         }
         return out
     }
+}
+
+/// What the provider says about a movie or series (shown on its detail page).
+struct MediaInfo: Hashable {
+    var plot: String?
+    var cast: String?
+    var director: String?
+    var genre: String?
+    var year: String?
+    var rating: Double?
+    var duration: String?
+    var backdrop: String?
+    var poster: String?
 }

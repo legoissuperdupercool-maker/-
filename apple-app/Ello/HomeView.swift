@@ -47,9 +47,9 @@ struct HomeView: View {
                             ChannelCard(channel: c, favorite: model.isFavorite(c)) { model.play(c) }.contextMenu { ChannelMenu(channel: c) }
                         }
                     }
-                } else if !model.live.isEmpty {
+                } else if !model.shelfLive.isEmpty {
                     Rail(title: "Live TV", action: ("See all", { tab = .live })) {
-                        ForEach(model.live.prefix(16)) { c in
+                        ForEach(model.shelfLive.prefix(16)) { c in
                             ChannelCard(channel: c, favorite: model.isFavorite(c)) { model.play(c) }.contextMenu { ChannelMenu(channel: c) }
                         }
                     }

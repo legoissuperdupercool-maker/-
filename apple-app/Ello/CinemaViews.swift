@@ -44,7 +44,7 @@ struct CinemaHome: View {
                         ForEach(because.items) { c in CinemaPoster(channel: c) { detail = c } }
                     }
                 }
-                let channels = model.favoriteChannels.isEmpty ? Array(model.live.prefix(16)) : model.favoriteChannels
+                let channels = model.favoriteChannels.isEmpty ? Array(model.shelfLive.prefix(16)) : model.favoriteChannels
                 if !channels.isEmpty {
                     CinemaRow(title: model.favoriteChannels.isEmpty ? "Live TV" : "Your channels", more: { tab = .live }) {
                         ForEach(channels) { c in

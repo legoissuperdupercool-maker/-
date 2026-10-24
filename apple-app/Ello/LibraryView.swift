@@ -63,20 +63,29 @@ struct DetailView: View {
     @State private var season = 1
     @State private var loadingEpisodes = false
     @State private var error: String?
+    /// Plot, cast and artwork from the provider (movie lists usually leave them out).
+    @State private var info: MediaInfo?
 
     private var seasons: [Int] { Array(Set(episodes.map(\.season))).sorted() }
+
+    private var meta: String {
+        let year = info?.year ?? channel.year
+        let genre = info?.genre ?? channel.genre
+        let rating = (info?.rating ?? channel.rating).map { String(format: "★ %.1f", $0) }
+        return [year, genre, info?.duration, rating].compactMap { $0 }.joined(separator: "  ·  ")
+    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .top, spacing: 26) {
-                    Artwork(url: channel.logo, name: channel.name)
+                    Artwork(url: channel.logo ?? info?.poster, name: channel.name)
                         .frame(width: 200, height: 300)
                         .clipShape(RoundedRectangle(cornerRadius: 18))
+                        .shadow(color: .black.opacity(0.6), radius: 24, y: 10)
                     VStack(alignment: .leading, spacing: 12) {
                         Text(channel.cleanName).font(.system(size: 32, weight: .bold))
-                        Text([channel.year, channel.genre, channel.rating.map { String(format: "★ %.1f", $0) }].compactMap { $0 }.joined(separator: "  ·  "))
-                            .foregroundStyle(Theme.dim)
+                        Text(meta).foregroundStyle(Theme.dim)
                         HStack(spacing: 12) {
                             actions
                             Button { model.toggleMyList(channel) } label: {
@@ -85,17 +94,38 @@ struct DetailView: View {
                             .buttonStyle(PillButtonStyle())
                         }
                         .padding(.vertical, 6)
-                        if let plot = channel.plot { Text(plot).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true) }
-                        if let cast = channel.cast {
+                        if let plot = info?.plot ?? channel.plot {
+                            Text(plot).foregroundStyle(Theme.text.opacity(0.85)).fixedSize(horizontal: false, vertical: true)
+                        } else if info == nil && !model.demo {
+                            ProgressView().tint(Theme.dim)
+                        }
+                        if let cast = info?.cast ?? channel.cast {
                             (Text("Cast  ").foregroundStyle(Theme.faint) + Text(cast).foregroundStyle(Theme.dim)).font(.system(size: 14))
+                        }
+                        if let director = info?.director {
+                            (Text("Director  ").foregroundStyle(Theme.faint) + Text(director).foregroundStyle(Theme.dim)).font(.system(size: 14))
                         }
                     }
                 }
                 if channel.kind == .series { episodeSection }
             }
             .padding(30)
+            .padding(.top, info?.backdrop != nil ? 120 : 0)
         }
-        .background(Theme.background)
+        // The title's wide artwork behind the top, fading into the page.
+        .background(alignment: .top) {
+            ZStack(alignment: .top) {
+                Theme.cinemaBg
+                if let backdrop = info?.backdrop {
+                    Artwork(url: backdrop, name: channel.name)
+                        .frame(height: 420)
+                        .overlay(LinearGradient(colors: [.clear, Theme.cinemaBg], startPoint: .center, endPoint: .bottom))
+                        .overlay(LinearGradient(colors: [Theme.cinemaBg.opacity(0.7), .clear], startPoint: .leading, endPoint: .trailing))
+                        .transition(.opacity)
+                }
+            }
+            .ignoresSafeArea()
+        }
         .overlay(alignment: .topTrailing) {
             Button { dismiss() } label: {
                 Image(systemName: "xmark").font(.system(size: 16, weight: .bold)).frame(width: 40, height: 40)
@@ -104,6 +134,7 @@ struct DetailView: View {
             .foregroundStyle(Theme.text).padding(18)
         }
         .task { await loadEpisodes() }
+        .task { if let found = await model.details(for: channel) { withAnimation { info = found } } else { info = MediaInfo() } }
     }
 
     @ViewBuilder private var actions: some View {
