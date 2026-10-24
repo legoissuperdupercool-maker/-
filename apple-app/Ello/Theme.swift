@@ -86,10 +86,15 @@ struct PillButtonStyle: ButtonStyle {
 }
 
 /// Artwork with a calm coloured placeholder (initials) while it loads or if it's missing.
+/// `fallback` can supply another address when the first one doesn't load (the poster from
+/// the provider's movie info).
 struct Artwork: View {
     let url: String?
     let name: String
     var contentMode: ContentMode = .fill
+    var fallback: (() async -> String?)? = nil
+
+    @State private var image: UIImage?
 
     var body: some View {
         ZStack {
@@ -97,15 +102,20 @@ struct Artwork: View {
             Text(initials)
                 .font(.system(size: 26, weight: .bold))
                 .foregroundStyle(.white.opacity(0.9))
-            if let url, let u = URL(string: url) {
-                AsyncImage(url: u, transaction: Transaction(animation: .easeOut(duration: 0.25))) { phase in
-                    if let image = phase.image {
-                        image.resizable().aspectRatio(contentMode: contentMode)
-                    }
-                }
+            if let image {
+                Image(uiImage: image).resizable().aspectRatio(contentMode: contentMode).transition(.opacity)
             }
         }
         .clipped()
+        .task(id: url) {
+            image = ImageLoader.cached(url)
+            if image != nil { return }
+            if let loaded = await ImageLoader.load(url) {
+                withAnimation(.easeOut(duration: 0.25)) { image = loaded }
+            } else if let fallback, let other = await fallback(), other != url, let loaded = await ImageLoader.load(other) {
+                withAnimation(.easeOut(duration: 0.25)) { image = loaded }
+            }
+        }
     }
 
     private var initials: String {
@@ -269,5 +279,66 @@ struct LogoIntro: View {
         guard !leaving else { return }
         withAnimation(.easeIn(duration: 0.5)) { leaving = true }
         after(0.5) { done() }
+    }
+}
+
+/// Loads artwork: cached in memory, identifies like a browser (some providers' image servers
+/// refuse other apps), generous time limits, one retry, and no duplicate downloads.
+enum ImageLoader {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.totalCostLimit = 120 * 1024 * 1024
+        return c
+    }()
+    private static let session: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.timeoutIntervalForRequest = 25
+        cfg.timeoutIntervalForResource = 60
+        cfg.httpMaximumConnectionsPerHost = 6
+        cfg.urlCache = URLCache(memoryCapacity: 20 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024)
+        cfg.requestCachePolicy = .returnCacheDataElseLoad
+        cfg.httpAdditionalHeaders = [
+            "User-Agent": "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+            "Accept": "image/avif,image/webp,image/png,image/jpeg,*/*"
+        ]
+        return URLSession(configuration: cfg)
+    }()
+
+    static func cached(_ address: String?) -> UIImage? {
+        guard let address else { return nil }
+        return cache.object(forKey: address as NSString)
+    }
+
+    static func load(_ address: String?) async -> UIImage? {
+        guard let address, !address.isEmpty else { return nil }
+        if let hit = cached(address) { return hit }
+        var fixed = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        if fixed.hasPrefix("//") { fixed = "https:" + fixed }
+        guard let url = URL(string: fixed) ?? URL(string: fixed.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? "") else { return nil }
+        for attempt in 0..<2 {
+            if Task.isCancelled { return nil }
+            if let result = try? await session.data(from: url) {
+                let (data, resp) = result
+                let ok = (resp as? HTTPURLResponse).map { (200..<300).contains($0.statusCode) } ?? true
+                if ok, let image = await decode(data) {
+                    cache.setObject(image, forKey: address as NSString, cost: data.count)
+                    return image
+                }
+            }
+            if attempt == 0 { try? await Task.sleep(for: .milliseconds(1200)) }
+        }
+        return nil
+    }
+
+    /// Decoded off the main thread and scaled down, so big posters don't stutter scrolling.
+    private static func decode(_ data: Data) async -> UIImage? {
+        await Task.detached(priority: .utility) {
+            guard let image = UIImage(data: data) else { return nil }
+            let maxSide: CGFloat = 900
+            let side = max(image.size.width, image.size.height)
+            guard side > maxSide else { return image.preparingForDisplay() ?? image }
+            let scale = maxSide / side
+            return image.preparingThumbnail(of: CGSize(width: image.size.width * scale, height: image.size.height * scale)) ?? image
+        }.value
     }
 }

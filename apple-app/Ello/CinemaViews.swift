@@ -350,7 +350,7 @@ struct CinemaPoster: View {
 
     private var poster: some View {
         Button(action: open) {
-            Artwork(url: channel.logo, name: channel.name)
+            Artwork(url: channel.logo, name: channel.name, fallback: posterFallback)
                 .frame(width: width, height: width.map { $0 * 1.5 })
                 .aspectRatio(2 / 3, contentMode: .fit)
                 .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
@@ -370,7 +370,7 @@ struct CinemaPoster: View {
         let glass = Theme.look == .glass
         return Button(action: open) {
             VStack(alignment: .leading, spacing: 8) {
-                Artwork(url: channel.logo, name: channel.name)
+                Artwork(url: channel.logo, name: channel.name, fallback: wideFallback)
                     .frame(width: w, height: w * 9 / 16)
                     .overlay {
                         if !glass {
@@ -402,6 +402,17 @@ struct CinemaPoster: View {
         }
         .buttonStyle(ProfileTileStyle())
         .contextMenu { menu }
+    }
+
+    /// When the list's poster doesn't load: the poster from the provider's movie info.
+    private var posterFallback: () async -> String? {
+        let model = model, channel = channel
+        return { await model.details(for: channel)?.poster }
+    }
+    /// Wide cards prefer the wide artwork from the movie info.
+    private var wideFallback: () async -> String? {
+        let model = model, channel = channel
+        return { let info = await model.details(for: channel); return info?.backdrop ?? info?.poster }
     }
 
     @ViewBuilder private var menu: some View {
