@@ -1,0 +1,225 @@
+import SwiftUI
+
+struct SettingsView: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    @State private var editing: Source?
+    @State private var adding = RootView.startScreen == "add"
+    @State private var editingProfile: Profile?
+    @State private var showFilters = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("Look") {
+                    HStack(spacing: 14) {
+                        ForEach(UITheme.allCases) { t in
+                            Button { model.uiTheme = t } label: { LookOption(theme: t, on: model.uiTheme == t) }
+                                .buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 6)
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Colour for \(model.profile.name)").font(.system(size: 15)).foregroundStyle(Theme.dim)
+                        HStack(spacing: 10) {
+                            ForEach(Theme.accents, id: \.id) { a in
+                                Button {
+                                    var p = model.profile
+                                    p.accent = a.id
+                                    model.saveProfile(p)
+                                } label: {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color(hex: a.hex)).frame(width: 34, height: 34)
+                                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .strokeBorder(.white, lineWidth: Theme.accentHex == a.hex ? 2.5 : 0).padding(-4))
+                                        .padding(4)
+                                }
+                                .buttonStyle(.plain)
+                                .accessibilityLabel(a.name)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                Section("Sources") {
+                    ForEach(model.sources) { s in
+                        Button { editing = s } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(s.name).font(.system(size: 17, weight: .semibold))
+                                    Text(s.kind.label).font(.system(size: 13)).foregroundStyle(Theme.dim)
+                                }
+                                Spacer()
+                                if s.id == model.currentSourceId {
+                                    Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.blue)
+                                }
+                            }
+                        }
+                        .foregroundStyle(Theme.text)
+                    }
+                    .onDelete { idx in idx.map { model.sources[$0] }.forEach(model.remove) }
+                    Button { adding = true } label: { Label("Add source", systemImage: "plus.circle.fill") }
+                }
+                Section("Profiles") {
+                    ForEach(model.profiles) { p in
+                        Button { editingProfile = p } label: {
+                            HStack(spacing: 12) {
+                                Avatar(profile: p, size: 34)
+                                Text(p.name)
+                                if p.kids { Text("Kids").font(.system(size: 12, weight: .bold)).foregroundStyle(.yellow) }
+                                Spacer()
+                                if p.id == model.activeProfileId { Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.blue) }
+                            }
+                        }
+                        .foregroundStyle(Theme.text)
+                    }
+                    Button {
+                        var p = Profile(name: "", color: Theme.profileColors[model.profiles.count % Theme.profileColors.count])
+                        p.avatar = AvatarArt.free(model.profiles.map(\.avatar))
+                        editingProfile = p
+                    } label: {
+                        Label("Add profile", systemImage: "person.badge.plus")
+                    }
+                    Button { dismiss(); model.showProfilePicker = true } label: { Label("Switch profile", systemImage: "person.2") }
+                }
+                Section {
+                    Button { showFilters = true } label: { Label("Filter & hide channels", systemImage: "line.3.horizontal.decrease.circle") }
+                } footer: {
+                    Text("Only show the countries you watch, hide categories and channels, and sort A–Z. Saved per profile.")
+                }
+                Section {
+                    Button { Task { await model.load(force: true) } } label: { Label("Reload channels, movies & series", systemImage: "arrow.clockwise") }
+                        .disabled(model.currentSource == nil)
+                }
+                Section("VPN") {
+                    Text("To hide your IP address, install the Mullvad (or any WireGuard) app from the App Store and switch it on. On iPad a VPN app covers every app, ello included, and Mullvad’s “Lockdown mode” blocks traffic if the VPN drops.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.dim)
+                }
+                Section("About") {
+                    LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "–")
+                    Text("Your logins stay on this device (passwords in the Keychain). ello only talks to your IPTV provider. Recommendations are worked out on the iPad.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.dim)
+                    Text("Video playback for MKV and other formats by VLC (MobileVLCKit, LGPL 2.1).")
+                        .font(.system(size: 13)).foregroundStyle(Theme.faint)
+                }
+            }
+            .navigationTitle("Settings")
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .sheet(isPresented: $adding) { SourceForm(source: nil) }
+            .sheet(item: $editing) { s in SourceForm(source: s) }
+            .fullScreenCover(item: $editingProfile) { p in ProfileEditor(profile: p) }
+            .sheet(isPresented: $showFilters) { ChannelFilterView() }
+        }
+        .preferredColorScheme(.dark)
+    }
+}
+
+/// A small picture of each layout to choose from.
+struct LookOption: View {
+    let theme: UITheme
+    let on: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 10).fill(Color(hex: 0x0E0E0E))
+                if theme == .cinema {
+                    VStack(spacing: 5) {
+                        LinearGradient(colors: [Color(hex: 0x1A1A1A), Theme.blue.opacity(0.7)], startPoint: .leading, endPoint: .trailing)
+                            .frame(height: 52).clipShape(RoundedRectangle(cornerRadius: 6))
+                        ForEach(0..<2, id: \.self) { _ in
+                            HStack(spacing: 4) { ForEach(0..<6, id: \.self) { _ in RoundedRectangle(cornerRadius: 2).fill(Color.white.opacity(0.22)) } }.frame(height: 18)
+                        }
+                    }
+                    .padding(8)
+                } else {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Capsule().fill(Color.white.opacity(0.22)).frame(width: 80, height: 7)
+                        ForEach(0..<2, id: \.self) { _ in
+                            HStack(spacing: 6) { ForEach(0..<4, id: \.self) { _ in RoundedRectangle(cornerRadius: 6).fill(Theme.blue.opacity(0.8)) } }
+                        }
+                    }
+                    .padding(8)
+                }
+            }
+            .frame(height: 112)
+            Text(theme.label).font(.system(size: 15, weight: .semibold))
+            Text(theme.blurb).font(.system(size: 12)).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(on ? Theme.blue : .clear, lineWidth: 2.5))
+    }
+}
+
+struct SourceForm: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.dismiss) private var dismiss
+    let source: Source?
+
+    @State private var kind: Source.Kind = .xtream
+    @State private var name = ""
+    @State private var server = ""
+    @State private var username = ""
+    @State private var password = ""
+    @State private var testing = false
+    @State private var error: String?
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Picker("Type", selection: $kind) {
+                    ForEach(Source.Kind.allCases) { Text($0.label).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                TextField("Name (e.g. My IPTV)", text: $name)
+                if kind == .xtream {
+                    TextField("Server (http://host:port)", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    TextField("Username", text: $username).textInputAutocapitalization(.never).autocorrectionDisabled()
+                    SecureField("Password", text: $password)
+                } else {
+                    TextField("Playlist URL (http://…/playlist.m3u)", text: $server).keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                }
+                if let error {
+                    Text(error).foregroundStyle(Theme.bad)
+                }
+                Section {
+                    Text("Your password is stored in this device’s Keychain and only sent to your provider.")
+                        .font(.system(size: 13)).foregroundStyle(Theme.dim)
+                }
+            }
+            .navigationTitle(source == nil ? "Add source" : "Edit source")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    if testing { ProgressView() } else { Button("Save") { Task { await save() } }.disabled(server.isEmpty) }
+                }
+            }
+            .onAppear {
+                if let s = source {
+                    kind = s.kind
+                    name = s.name
+                    server = s.server
+                    username = s.username
+                    password = Keychain.get(s.id) ?? ""
+                }
+            }
+        }
+        .preferredColorScheme(.dark)
+    }
+
+    private func save() async {
+        var s = source ?? Source(name: "", kind: kind, server: "")
+        s.kind = kind
+        s.name = name.isEmpty ? (kind == .xtream ? "My IPTV" : "Playlist") : name
+        s.server = server
+        s.username = username
+        testing = true
+        error = await model.test(s, password: password)
+        testing = false
+        if error == nil {
+            model.save(s, password: password)
+            dismiss()
+        }
+    }
+}
