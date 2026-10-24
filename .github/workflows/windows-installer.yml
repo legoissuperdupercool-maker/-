@@ -3,6 +3,11 @@ name: Build ForgeInstaller.exe
 on:
   push:
     branches: ['**']
+    # The iPad app's files don't affect this installer.
+    paths-ignore:
+      - 'apple-app/**'
+      - '.github/workflows/apple-app.yml'
+      - '.github/workflows/windows-installer.yml'
   workflow_dispatch:
 
 permissions:

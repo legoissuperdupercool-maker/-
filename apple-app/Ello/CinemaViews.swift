@@ -88,7 +88,7 @@ struct CinemaLibrary: View {
             VStack(alignment: .leading, spacing: 26) {
                 if genre == nil && query.isEmpty {
                     Billboard(items: billboardItems(sorted)) { detail = $0 }
-                        .overlay(alignment: .topLeading) { header.padding(.top, 70) }
+                        .overlay(alignment: .topLeading) { header.padding(.top, 108) }
                     CinemaRow(title: "New \(label.lowercased())") {
                         ForEach(sorted.prefix(30)) { c in CinemaPoster(channel: c) { detail = c } }
                     }
@@ -105,7 +105,7 @@ struct CinemaLibrary: View {
                         }
                     }
                 } else {
-                    header.padding(.top, 70)
+                    header.padding(.top, 108)
                     let shown = sorted.filter { (genre == nil || $0.group == genre) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)) }
                     Text("\(genre.flatMap { g in model.categories(kind).first { $0.id == g }?.name } ?? "Results") · \(shown.count)")
                         .font(.system(size: 15)).foregroundStyle(Theme.dim).padding(.horizontal, 28)
