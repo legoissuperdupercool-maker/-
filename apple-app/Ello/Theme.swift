@@ -154,50 +154,120 @@ struct Stars: View {
     }
 }
 
-/// The ello logo with a short start-up animation: the letters rise in, a light sweeps
-/// along an arc, then it all fades into the app. Tap to skip.
+/// The start-up animation, the same as the Windows app's: a blue planet rises out of the
+/// dark, its edge lights up from the middle outward with a flash, the letters come up one by
+/// one, the "o" fills with blue and the logo glows once. Tap to skip.
 struct LogoIntro: View {
     let done: () -> Void
-    @State private var shown = false
-    @State private var arc: CGFloat = 0
+    // Scene in the Windows app's units (1672 × 941, filled like "slice").
+    private static let rx: CGFloat = 1500, ry: CGFloat = 1333, cx: CGFloat = 836, cy: CGFloat = 1900
+    private static let top: CGFloat = cy - ry
+
+    @State private var planet = false
+    @State private var edge: CGFloat = 0
+    @State private var flare = 0
+    @State private var letters = [false, false, false, false]
+    @State private var tint = false
+    @State private var shine = false
     @State private var leaving = false
 
     var body: some View {
-        ZStack {
-            Color.black.ignoresSafeArea()
-            ZStack {
+        GeometryReader { geo in
+            let scale = max(geo.size.width / 1672, geo.size.height / 941)
+            ZStack(alignment: .topLeading) {
+                // 1. The planet.
                 Ellipse()
-                    .trim(from: 0, to: arc)
-                    .stroke(LinearGradient(colors: [.clear, Color(hex: 0x8ACBF9), Color(hex: 0x0986F5)], startPoint: .leading, endPoint: .trailing),
-                            style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .frame(width: 420, height: 120)
-                    .rotationEffect(.degrees(-8))
-                    .offset(y: 46)
-                    .blur(radius: 0.5)
-                    .shadow(color: Color(hex: 0x0986F5).opacity(0.8), radius: 10)
-                Image("Wordmark")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 260)
-                    .scaleEffect(shown ? 1 : 0.86)
-                    .opacity(shown ? 1 : 0)
-                    .offset(y: shown ? 0 : 14)
+                    .fill(RadialGradient(stops: [
+                        .init(color: Color(hex: 0x2A86F2), location: 0),
+                        .init(color: Color(hex: 0x0C46B8), location: 0.38),
+                        .init(color: Color(hex: 0x03144A), location: 0.72),
+                        .init(color: Color(hex: 0x010614), location: 1)
+                    ], center: UnitPoint(x: 0.5, y: (980 - Self.top) / (2 * Self.ry)), startRadius: 0, endRadius: 760))
+                    .frame(width: 2 * Self.rx, height: 2 * Self.ry)
+                    .position(x: Self.cx, y: Self.cy)
+                    .offset(y: planet ? 0 : 70)
+                    .opacity(planet ? 1 : 0)
+                // 2. Its edge, from the middle outward.
+                ZStack {
+                    ForEach([-1.0, 1.0], id: \.self) { side in
+                        let arc = Self.arc(side: side)
+                        arc.trim(from: 0, to: edge).stroke(Self.edgeGradient, style: StrokeStyle(lineWidth: 10, lineCap: .round)).blur(radius: 7)
+                        arc.trim(from: 0, to: edge).stroke(Self.edgeGradient, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    }
+                }
+                .frame(width: 1672, height: 941)
+                Circle()
+                    .fill(Color(hex: 0x7FE3FF))
+                    .frame(width: 120, height: 120)
+                    .blur(radius: 7)
+                    .scaleEffect(x: [0.2, 1.4, 4][flare], y: [0.2, 0.6, 0.3][flare])
+                    .opacity(flare == 1 ? 0.9 : 0)
+                    .position(x: Self.cx, y: Self.top)
+                // 3. The letters, one by one; 4. the "o" fills with blue.
+                ZStack {
+                    ForEach(Array(["intro-e", "intro-l1", "intro-l2", "intro-o"].enumerated()), id: \.offset) { i, name in
+                        Image(name).resizable()
+                            .opacity(letters[i] ? 1 : 0)
+                            .offset(y: letters[i] ? 0 : 30)
+                            .blur(radius: letters[i] ? 0 : 9)
+                    }
+                    Image("intro-otint").resizable().opacity(tint ? 1 : 0)
+                }
+                .frame(width: 545, height: 246)
+                .shadow(color: Color(red: 80 / 255, green: 180 / 255, blue: 1).opacity(shine ? 0.8 : 0), radius: 30)
+                .position(x: 560 + 545 / 2, y: 311 + 246 / 2)
             }
-            .scaleEffect(leaving ? 1.06 : 1)
+            .frame(width: 1672, height: 941)
+            .scaleEffect(scale)
+            .frame(width: geo.size.width, height: geo.size.height)
         }
+        .background(Color.black)
+        .ignoresSafeArea()
         .opacity(leaving ? 0 : 1)
         .contentShape(Rectangle())
         .onTapGesture { finish() }
-        .onAppear {
-            withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.15)) { shown = true }
-            withAnimation(.easeInOut(duration: 1.1).delay(0.5)) { arc = 1 }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 2.3) { finish() }
+        .onAppear(perform: play)
+    }
+
+    /// One half of the planet's edge, from its top to where it leaves the scene.
+    private static func arc(side: Double) -> Path {
+        let a = Double(asin(636 / rx))
+        return Path { p in
+            for i in 0...60 {
+                let t = -Double.pi / 2 + side * a * Double(i) / 60
+                let pt = CGPoint(x: cx + rx * CGFloat(cos(t)), y: cy + ry * CGFloat(sin(t)))
+                if i == 0 { p.move(to: pt) } else { p.addLine(to: pt) }
+            }
         }
+    }
+
+    private static let edgeGradient = LinearGradient(stops: [
+        .init(color: Color(hex: 0x1450D0).opacity(0), location: 0),
+        .init(color: Color(hex: 0x1458E0), location: 0.22),
+        .init(color: Color(hex: 0x3AD6FF), location: 0.5),
+        .init(color: Color(hex: 0x1458E0), location: 0.78),
+        .init(color: Color(hex: 0x1450D0).opacity(0), location: 1)
+    ], startPoint: UnitPoint(x: 200.0 / 1672, y: 0), endPoint: UnitPoint(x: 1472.0 / 1672, y: 0))
+
+    private func after(_ t: Double, _ f: @escaping () -> Void) { DispatchQueue.main.asyncAfter(deadline: .now() + t, execute: f) }
+
+    private func play() {
+        after(0.1) { withAnimation(.timingCurve(0.2, 0.7, 0.2, 1, duration: 1.5)) { planet = true } }
+        after(0.55) { withAnimation(.timingCurve(0.5, 0, 0.2, 1, duration: 1.1)) { edge = 1 } }
+        after(0.5) { withAnimation(.easeOut(duration: 0.3)) { flare = 1 } }
+        after(0.8) { withAnimation(.easeOut(duration: 0.9)) { flare = 2 } }
+        for i in 0..<4 {
+            after(1.05 + 0.12 * Double(i)) { withAnimation(.timingCurve(0.2, 0.8, 0.2, 1, duration: 0.75)) { letters[i] = true } }
+        }
+        after(1.95) { withAnimation(.easeInOut(duration: 0.8)) { tint = true } }
+        after(2.2) { withAnimation(.easeInOut(duration: 0.45)) { shine = true } }
+        after(2.65) { withAnimation(.easeInOut(duration: 0.45)) { shine = false } }
+        after(2.7) { finish() }
     }
 
     private func finish() {
         guard !leaving else { return }
-        withAnimation(.easeIn(duration: 0.45)) { leaving = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { done() }
+        withAnimation(.easeIn(duration: 0.5)) { leaving = true }
+        after(0.5) { done() }
     }
 }

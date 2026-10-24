@@ -12,6 +12,7 @@ struct CinemaHome: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
                 Billboard(items: billboardItems(model.shelfMovies + model.shelfSeries)) { detail = $0 }
+                if Theme.look == .wonder { Collections(tab: $tab) }
                 if !model.continueWatching.isEmpty {
                     CinemaRow(title: "Continue watching for \(model.profile.name)") {
                         ForEach(model.continueWatching) { item in
@@ -78,6 +79,7 @@ struct CinemaLibrary: View {
     @State private var genre: String?
     @State private var query = ""
     @State private var detail: Channel?
+    @State private var showFilters = false
 
     private var label: String { kind == .movie ? "Movies" : "Series" }
     /// The rows use the profile's movie/series filters; search looks through everything.
@@ -124,6 +126,7 @@ struct CinemaLibrary: View {
         .scrollIndicators(.hidden)
         .ignoresSafeArea(edges: .top)
         .sheet(item: $detail) { c in DetailView(channel: c) }
+        .sheet(isPresented: $showFilters) { VodFilterView() }
     }
 
     private var header: some View {
@@ -136,6 +139,22 @@ struct CinemaLibrary: View {
                 HStack(spacing: 8) {
                     Text(genre.flatMap { g in model.categories(kind).first { $0.id == g }.map { cleanCategory($0.name) } } ?? "Genres").lineLimit(1)
                     Image(systemName: "arrowtriangle.down.fill").font(.system(size: 9))
+                }
+                .font(.system(size: 15, weight: .medium))
+                .padding(.horizontal, 12).frame(height: 34)
+                .background(.black.opacity(0.6))
+                .overlay(Rectangle().strokeBorder(.white.opacity(0.8), lineWidth: 1))
+            }
+            .tint(.white)
+            Button { showFilters = true } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "line.3.horizontal.decrease")
+                    Text("Filter")
+                    let hidden = model.profile.vodHiddenCountries.count + model.profile.vodHiddenCategories.count
+                    if hidden > 0 {
+                        Text("\(hidden)").font(.system(size: 12, weight: .bold)).padding(.horizontal, 6).frame(height: 18)
+                            .background(Theme.blue, in: Capsule()).foregroundStyle(Theme.onAccent)
+                    }
                 }
                 .font(.system(size: 15, weight: .medium))
                 .padding(.horizontal, 12).frame(height: 34)
@@ -192,6 +211,7 @@ struct Billboard: View {
     @State private var index = 0
     @Environment(\.horizontalSizeClass) private var sizeClass
     private let timer = Timer.publish(every: 9, on: .main, in: .common).autoconnect()
+    private var inset: Bool { Theme.look == .premium || Theme.look == .wonder }
 
     var body: some View {
         let height: CGFloat = sizeClass == .compact ? 480 : 560
@@ -262,6 +282,10 @@ struct Billboard: View {
         }
         .frame(height: height)
         .clipped()
+        // Premium and Wonder: a rounded carousel set in from the edges, under the menu.
+        .clipShape(RoundedRectangle(cornerRadius: inset ? 18 : 0, style: .continuous))
+        .padding(.horizontal, inset ? 28 : 0)
+        .padding(.top, inset ? 72 : 0)
         .onReceive(timer) { _ in
             guard items.count > 1 else { return }
             withAnimation(.easeInOut(duration: 0.6)) { index += 1 }
@@ -428,4 +452,39 @@ func billboardItems(_ list: [Channel]) -> [Channel] {
     let fresh = newest(list, 30)
     let withArt = fresh.filter { $0.logo != nil }
     return Array((withArt.isEmpty ? fresh : withArt).prefix(5))
+}
+
+/// Wonder: the row of collection tiles under the billboard (as in the Windows app).
+struct Collections: View {
+    @Binding var tab: Tab
+    private let tiles: [(tab: Tab, label: String, icon: String, from: UInt32, to: UInt32)] = [
+        (.movies, "Movies", "film.fill", 0x1D3C8F, 0x0B1640),
+        (.series, "Series", "rectangle.stack.fill", 0x5B2A86, 0x1D0D33),
+        (.live, "Live TV", "tv.fill", 0x0F6E74, 0x062A33),
+        (.guide, "TV Guide", "calendar", 0x8A4B16, 0x2E1606),
+        (.mylist, "Watchlist", "bookmark.fill", 0x1F6B3A, 0x0A2614)
+    ]
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 14) {
+                ForEach(tiles, id: \.label) { t in
+                    Button { tab = t.tab } label: {
+                        VStack(spacing: 8) {
+                            Image(systemName: t.icon).font(.system(size: 24, weight: .semibold))
+                            Text(t.label.uppercased()).font(.system(size: 14, weight: .heavy)).tracking(2)
+                        }
+                        .foregroundStyle(.white)
+                        .frame(width: 190, height: 100)
+                        .background(LinearGradient(colors: [Color(hex: t.from), Color(hex: t.to)], startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1.5))
+                        .shadow(color: .black.opacity(0.5), radius: 12, y: 6)
+                    }
+                    .buttonStyle(ProfileTileStyle())
+                }
+            }
+            .padding(.horizontal, 28)
+        }
+    }
 }

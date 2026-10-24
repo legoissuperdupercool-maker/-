@@ -32,6 +32,7 @@ struct RootView: View {
     @State private var tab: Tab = RootView.startTab
     @State private var showSettings = RootView.startScreen == "settings"
     @AppStorage("intro") private var introOn = true
+    @Environment(\.horizontalSizeClass) private var rootSizeClass
     @State private var introDone = false
 
     /// Screenshot runs pick the first screen with `-tab movies` etc.
@@ -51,14 +52,18 @@ struct RootView: View {
     var body: some View {
         @Bindable var model = model
         let cinema = model.uiTheme.isCinema
+        // Theater on iPad: a side menu instead of the top bar.
+        let rail = model.uiTheme == .theater && rootSizeClass != .compact
         ZStack(alignment: .top) {
             if cinema {
                 LookBackground().ignoresSafeArea()
             } else {
                 AppBackground(profile: model.profile)
             }
+            HStack(spacing: 0) {
+            if rail { SideRail(tab: $tab, showSettings: $showSettings) }
             VStack(spacing: 0) {
-                if !cinema || !fullBleed { TopBar(tab: $tab, showSettings: $showSettings) }
+                if !rail && (!cinema || !fullBleed) { TopBar(tab: $tab, showSettings: $showSettings) }
                 if model.sources.isEmpty {
                     WelcomeView(showSettings: $showSettings)
                 } else if model.loading {
@@ -85,8 +90,9 @@ struct RootView: View {
                     }
                 }
             }
+            }
             // Cinema pages with a billboard run under a see-through top bar.
-            if cinema && fullBleed {
+            if cinema && fullBleed && !rail {
                 TopBar(tab: $tab, showSettings: $showSettings)
                     .background(LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             }
@@ -123,6 +129,37 @@ struct RootView: View {
     }
 }
 
+/// A menu entry: which page, its name in the look and its icon (the Windows app's menus).
+struct NavItem: Identifiable {
+    let tab: Tab
+    let label: String
+    let icon: String
+    var id: String { tab.rawValue }
+
+    static func items(_ look: UITheme) -> [NavItem] {
+        switch look {
+        case .premium:
+            return [.init(tab: .home, label: "Home", icon: "house.fill"), .init(tab: .movies, label: "Movies", icon: "film.fill"),
+                    .init(tab: .series, label: "TV Shows", icon: "rectangle.stack.fill"), .init(tab: .live, label: "Live TV", icon: "tv.fill"),
+                    .init(tab: .guide, label: "Guide", icon: "calendar"), .init(tab: .mylist, label: "My Stuff", icon: "bookmark.fill")]
+        case .wonder:
+            return [.init(tab: .home, label: "Home", icon: "house.fill"), .init(tab: .mylist, label: "Watchlist", icon: "plus"),
+                    .init(tab: .movies, label: "Movies", icon: "film.fill"), .init(tab: .series, label: "Series", icon: "rectangle.stack.fill"),
+                    .init(tab: .live, label: "Live", icon: "tv.fill")]
+        case .glass:
+            return [.init(tab: .home, label: "Watch Now", icon: "play.fill"), .init(tab: .movies, label: "Movies", icon: "film.fill"),
+                    .init(tab: .series, label: "TV Shows", icon: "rectangle.stack.fill"), .init(tab: .live, label: "Live", icon: "tv.fill"),
+                    .init(tab: .guide, label: "Guide", icon: "calendar"), .init(tab: .mylist, label: "Library", icon: "bookmark.fill")]
+        case .theater:
+            return [.init(tab: .home, label: "Home", icon: "house.fill"), .init(tab: .series, label: "Series", icon: "rectangle.stack.fill"),
+                    .init(tab: .movies, label: "Movies", icon: "film.fill"), .init(tab: .live, label: "Live TV", icon: "tv.fill"),
+                    .init(tab: .guide, label: "TV Guide", icon: "calendar"), .init(tab: .mylist, label: "My List", icon: "bookmark.fill")]
+        case .classic:
+            return Tab.classic.map { .init(tab: $0, label: $0.rawValue, icon: "circle") }
+        }
+    }
+}
+
 struct TopBar: View {
     @Environment(AppModel.self) private var model
     @Binding var tab: Tab
@@ -137,30 +174,16 @@ struct TopBar: View {
             if !compact {
                 Wordmark(size: 22).padding(.trailing, 18)
             }
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: cinema ? 2 : 6) {
-                    ForEach(cinema ? Tab.cinema : Tab.classic) { t in
-                        if cinema {
-                            Button { tab = t } label: { CinemaTab(title: t.rawValue, on: tab == t, look: look, compact: compact) }
-                                .buttonStyle(.plain)
-                        } else {
-                            Button(t.rawValue) { tab = t }
-                                .font(.system(size: 16, weight: .medium))
-                                .lineLimit(1)
-                                .padding(.horizontal, compact ? 10 : 16)
-                                .frame(height: 38)
-                                .foregroundStyle(tab == t ? Color.black : Theme.dim)
-                                .background(tab == t ? Theme.text : Color.clear, in: Capsule())
-                        }
-                    }
-                }
-                .padding(look == .glass ? 4 : 0)
-                .background {
-                    if look == .glass { Capsule().fill(.ultraThinMaterial).overlay(Capsule().strokeBorder(.white.opacity(0.15))) }
-                }
+            if look == .glass && !compact {
+                // Glass: the tab bar floats in the middle.
+                Spacer(minLength: 8)
+                tabs
+                Spacer(minLength: 8)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) { tabs }
+                    .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+                Spacer(minLength: 8)
             }
-            .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
-            Spacer(minLength: 8)
             if model.sources.count > 1 {
                 Menu {
                     ForEach(model.sources) { s in
@@ -186,6 +209,75 @@ struct TopBar: View {
         .padding(.horizontal, compact ? 14 : 28)
         .padding(.top, 8)
         .padding(.bottom, 6)
+    }
+
+    private var tabs: some View {
+        HStack(spacing: cinema ? 2 : 6) {
+            if cinema {
+                ForEach(NavItem.items(look)) { item in
+                    Button { tab = item.tab } label: { CinemaTab(item: item, on: tab == item.tab, look: look, compact: compact) }
+                        .buttonStyle(.plain)
+                }
+            } else {
+                ForEach(Tab.classic) { t in
+                    Button(t.rawValue) { tab = t }
+                        .font(.system(size: 16, weight: .medium))
+                        .lineLimit(1)
+                        .padding(.horizontal, compact ? 10 : 16)
+                        .frame(height: 38)
+                        .foregroundStyle(tab == t ? Color.black : Theme.dim)
+                        .background(tab == t ? Theme.text : Color.clear, in: Capsule())
+                }
+            }
+        }
+        .padding(look == .glass ? 4 : 0)
+        .background {
+            if look == .glass { Capsule().fill(.ultraThinMaterial).overlay(Capsule().strokeBorder(.white.opacity(0.15))) }
+        }
+    }
+}
+
+/// Theater on iPad: the side menu of icons, like the Windows app's.
+struct SideRail: View {
+    @Environment(AppModel.self) private var model
+    @Binding var tab: Tab
+    @Binding var showSettings: Bool
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Button { model.showProfilePicker = true } label: { Avatar(profile: model.profile, size: 38) }
+                .padding(.top, 18).padding(.bottom, 26)
+            ForEach(NavItem.items(.theater)) { item in
+                Button { tab = item.tab } label: {
+                    Image(systemName: item.icon)
+                        .font(.system(size: 21, weight: .semibold))
+                        .foregroundStyle(tab == item.tab ? Color.white : Color.white.opacity(0.55))
+                        .frame(width: 72, height: 52)
+                        .overlay(alignment: .leading) {
+                            if tab == item.tab { Capsule().fill(Theme.blue).frame(width: 3, height: 24) }
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(item.label)
+            }
+            Spacer()
+            if model.sources.count > 1 {
+                Menu {
+                    ForEach(model.sources) { s in Button(s.name) { model.select(s.id) } }
+                } label: {
+                    Image(systemName: "antenna.radiowaves.left.and.right").font(.system(size: 19)).frame(width: 72, height: 48)
+                }
+                .tint(.white.opacity(0.7))
+            }
+            Button { showSettings = true } label: {
+                Image(systemName: "gearshape.fill").font(.system(size: 21)).frame(width: 72, height: 52)
+            }
+            .foregroundStyle(.white.opacity(0.7))
+            .padding(.bottom, 14)
+        }
+        .frame(width: 72)
+        .frame(maxHeight: .infinity)
+        .background(LinearGradient(colors: [.black, .black.opacity(0.85)], startPoint: .leading, endPoint: .trailing).ignoresSafeArea())
     }
 }
 
@@ -237,7 +329,7 @@ struct ErrorView: View {
 
 /// A tab in the cinema top bar, drawn per look.
 struct CinemaTab: View {
-    let title: String
+    let item: NavItem
     let on: Bool
     let look: UITheme
     let compact: Bool
@@ -245,31 +337,33 @@ struct CinemaTab: View {
     var body: some View {
         switch look {
         case .glass:
-            Text(title)
+            Text(item.label)
                 .font(.system(size: 15, weight: on ? .semibold : .medium))
                 .foregroundStyle(on ? Color.black : Color.white.opacity(0.85))
                 .padding(.horizontal, compact ? 12 : 16).frame(height: 36)
                 .background(on ? Color.white : Color.clear, in: Capsule())
         case .wonder:
             VStack(spacing: 5) {
-                Text(title.uppercased())
-                    .font(.system(size: 14, weight: .bold)).tracking(1.6)
-                    .foregroundStyle(on ? Color.white : Color.white.opacity(0.7))
+                HStack(spacing: 7) {
+                    Image(systemName: item.icon).font(.system(size: 14, weight: .bold))
+                    Text(item.label.uppercased()).font(.system(size: 14, weight: .bold)).tracking(1.6)
+                }
+                .foregroundStyle(on ? Color.white : Color.white.opacity(0.75))
                 Capsule().fill(on ? Color.white : .clear).frame(height: 2)
             }
             .fixedSize()
             .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
         case .premium:
             VStack(spacing: 4) {
-                Text(title).font(.system(size: 16, weight: on ? .semibold : .regular))
+                Text(item.label).font(.system(size: 16, weight: on ? .semibold : .regular))
                     .foregroundStyle(on ? Color.white : Color.white.opacity(0.7))
-                Capsule().fill(on ? Theme.blue : .clear).frame(height: 3)
+                Capsule().fill(on ? Color.white : .clear).frame(height: 2)
             }
             .fixedSize()
             .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
         default:
             VStack(spacing: 4) {
-                Text(title).font(.system(size: 16, weight: on ? .bold : .medium))
+                Text(item.label).font(.system(size: 16, weight: on ? .bold : .medium))
                     .foregroundStyle(on ? Color.white : Color.white.opacity(0.72))
                 Capsule().fill(on ? Theme.blue : .clear).frame(width: 22, height: 3)
             }
