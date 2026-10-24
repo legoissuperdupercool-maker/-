@@ -30,9 +30,12 @@ final class AppModel {
     /// Something to play full screen.
     var playing: PlayRequest?
 
-    /// Cinema or Classic layout (Settings → Look), for everyone on this device.
-    var uiTheme: UITheme = .cinema {
-        didSet { if !demo { defaults.set(uiTheme.rawValue, forKey: "uiTheme") } }
+    /// The look (Settings → Look), for everyone on this device.
+    var uiTheme: UITheme = .theater {
+        didSet {
+            if !demo { defaults.set(uiTheme.rawValue, forKey: "uiTheme") }
+            applyAccent()
+        }
     }
     /// Bumped when the theme colour changes so views pick up `Theme.blue`.
     var accentVersion = 0
@@ -60,16 +63,18 @@ final class AppModel {
         }
         currentSourceId = defaults.string(forKey: "currentSource") ?? sources.first?.id
         loadProfiles()
-        uiTheme = UITheme(rawValue: defaults.string(forKey: "uiTheme") ?? "") ?? .cinema
+        uiTheme = UITheme(saved: defaults.string(forKey: "uiTheme"))
         showProfilePicker = profiles.count > 1
         applyAccent()
     }
 
-    /// Point `Theme.blue` at the active profile's colour.
+    /// Point `Theme.blue` at the active profile's colour (or the look's own colour when the
+    /// profile hasn't picked one), and `Theme.look` at the look.
     func applyAccent() {
-        let hex = Theme.accentValue(profile.accent)
-        if hex != Theme.accentHex {
+        let hex = profile.accent == nil ? uiTheme.accent : Theme.accentValue(profile.accent)
+        if hex != Theme.accentHex || Theme.look != uiTheme {
             Theme.accentHex = hex
+            Theme.look = uiTheme
             accentVersion += 1
         }
     }
@@ -191,9 +196,9 @@ final class AppModel {
     @ObservationIgnored private var recCache: (sig: String, value: Recommendations)?
     var recommendations: Recommendations {
         let p = profile
-        let sig = "\(p.id)|\(movies.count)|\(series.count)|\(p.myList.map(\.key).joined(separator: ","))|\(p.progress.count)|\(p.progress.values.filter(\.finished).count)"
+        let sig = "\(p.id)|\(shelfMovies.count)|\(shelfSeries.count)|\(p.myList.map(\.key).joined(separator: ","))|\(p.progress.count)|\(p.progress.values.filter(\.finished).count)"
         if let c = recCache, c.sig == sig { return c.value }
-        let value = Recommender.recommend(candidates: movies + series, categories: categories, myList: p.myList,
+        let value = Recommender.recommend(candidates: shelfMovies + shelfSeries, categories: categories, myList: p.myList,
                                           history: Array(p.progress.values), channelLookup: channel)
         recCache = (sig, value)
         return value
@@ -350,6 +355,45 @@ final class AppModel {
         categories = sort == .name
             ? shown.categories.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             : shown.categories
+        shelfMovies = ContentFilter.shelf(movies, categories: categories, profile: profile)
+        shelfSeries = ContentFilter.shelf(series, categories: categories, profile: profile)
+    }
+
+    // MARK: movie & series filters
+
+    /// Movies and series for Home, the rows and recommendations: without the profile's hidden
+    /// countries/languages and categories. `movies` / `series` stay complete for search.
+    var shelfMovies: [Channel] = []
+    var shelfSeries: [Channel] = []
+
+    /// Countries and languages found in the movie and series lists, most titles first.
+    var vodCountries: [CountryCount] {
+        let catCountry = ContentFilter.categoryCountries(categories)
+        var counts: [String: Int] = [:]
+        var perGroup: [String: Int] = [:]
+        var loose: [Channel] = []
+        for c in movies + series {
+            if let g = c.group, catCountry[g] != nil { perGroup[g, default: 0] += 1 } else { loose.append(c) }
+        }
+        for (g, n) in perGroup { if let code = catCountry[g] { counts[code, default: 0] += n } }
+        for c in loose { if let code = Country.of(channel: c.name) ?? Country.language(c.name) { counts[code, default: 0] += 1 } }
+        return counts.map { CountryCount(code: $0.key, count: $0.value) }.sorted { $0.count > $1.count }
+    }
+
+    func setVodCountryHidden(_ code: String, _ hidden: Bool) {
+        var p = profile
+        p.vodHiddenCountries.removeAll { $0 == code }
+        if hidden { p.vodHiddenCountries.append(code) }
+        profile = p
+        refilter()
+    }
+
+    func setVodCategoryHidden(_ id: String, _ hidden: Bool) {
+        var p = profile
+        p.vodHiddenCategories.removeAll { $0 == id }
+        if hidden { p.vodHiddenCategories.append(id) }
+        profile = p
+        refilter()
     }
 
     /// Show the cached catalogue at once; download it only when it's missing,
@@ -368,7 +412,14 @@ final class AppModel {
         error = nil
         status = cachedAt == nil ? "Loading channels, movies & series…" : nil
         do {
-            let (channels, cats) = try await download(source)
+            let (channels, cats) = try await download(source) { [weak self] step in
+                self?.status = step
+            } onLive: { [weak self] live, cats in
+                // Live TV is usable while movies and series still load.
+                guard let self, cachedAt == nil, !live.isEmpty else { return }
+                self.apply(live, cats)
+                self.loading = false
+            }
             apply(channels, cats)
             let cache = Cache(channels: channels, categories: cats, fetchedAt: Date())
             try? JSONEncoder().encode(cache).write(to: url)
@@ -379,14 +430,24 @@ final class AppModel {
         status = nil
     }
 
-    private func download(_ source: Source) async throws -> ([Channel], [Category]) {
-        if source.kind == .m3u { return try await M3UParser.load(source) }
+    private func download(_ source: Source, step: (String) -> Void = { _ in },
+                          onLive: ([Channel], [Category]) -> Void = { _, _ in }) async throws -> ([Channel], [Category]) {
+        if source.kind == .m3u {
+            step("Loading your playlist…")
+            return try await M3UParser.load(source)
+        }
         let client = XtreamClient(source: source, password: Keychain.get(source.id) ?? "")
+        step("Signing in to your provider…")
         try await client.authenticate()
+        step("Loading categories…")
         let cats = try await client.categories()
         // One list at a time: providers often allow only 1–2 connections.
+        step("Loading live channels…")
         let l = (try? await client.live()) ?? []
+        onLive(l, cats)
+        step("Loading movies…")
         let m = (try? await client.movies()) ?? []
+        step("Loading series…")
         let s = (try? await client.series()) ?? []
         if l.isEmpty && m.isEmpty && s.isEmpty { throw ProviderError.empty }
         return (l + m + s, cats)

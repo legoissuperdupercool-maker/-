@@ -41,7 +41,8 @@ private func decode64(_ s: String?) -> String? {
 private let session: URLSession = {
     let cfg = URLSessionConfiguration.default
     cfg.timeoutIntervalForRequest = 30
-    cfg.timeoutIntervalForResource = 120
+    // Big providers' movie lists run to tens of MB.
+    cfg.timeoutIntervalForResource = 600
     cfg.httpAdditionalHeaders = ["User-Agent": "VLC/3.0.20 LibVLC/3.0.20"]
     return URLSession(configuration: cfg)
 }()

@@ -60,6 +60,36 @@ enum ContentFilter {
         }
         return (list, cats)
     }
+
+    /// The country or language of a movie or series: from its category ("Movies | Persian",
+    /// "FA - Drama"), else from the title's prefix or language words.
+    static func vodCountry(_ c: Channel, categoryCountry: [String: String]) -> String? {
+        if let g = c.group, let code = categoryCountry[g] { return code }
+        return Country.of(channel: c.name) ?? Country.language(c.name)
+    }
+
+    /// Country (or language) per movie/series category.
+    static func categoryCountries(_ categories: [Category]) -> [String: String] {
+        var out: [String: String] = [:]
+        for cat in categories where cat.kind != .live {
+            if let code = Country.of(category: cat.name) ?? Country.language(cat.name) { out[cat.id] = code }
+        }
+        return out
+    }
+
+    /// Home, the rows and recommendations: without the profile's hidden countries/languages and
+    /// categories for movies and series. Search uses the full lists.
+    static func shelf(_ list: [Channel], categories: [Category], profile: Profile) -> [Channel] {
+        let hiddenCountries = Set(profile.vodHiddenCountries)
+        let hiddenCats = Set(profile.vodHiddenCategories)
+        if hiddenCountries.isEmpty && hiddenCats.isEmpty { return list }
+        let catCountry = categoryCountries(categories)
+        return list.filter { c in
+            if let g = c.group, hiddenCats.contains(g) { return false }
+            if !hiddenCountries.isEmpty, let code = vodCountry(c, categoryCountry: catCountry), hiddenCountries.contains(code) { return false }
+            return true
+        }
+    }
 }
 
 /// Countries from the prefixes providers put on categories and channels
@@ -79,7 +109,7 @@ enum Country {
         "AU": "Australia", "NZ": "New Zealand", "BR": "Brazil", "MX": "Mexico", "LA": "Latin America",
         "CO": "Colombia", "CL": "Chile", "PE": "Peru", "CN": "China", "JP": "Japan", "KR": "Korea",
         "PH": "Philippines", "TH": "Thailand", "VN": "Vietnam", "ID": "Indonesia", "MY": "Malaysia",
-        "AFR": "Africa", "CAR": "Caribbean", "EX": "Ex-Yugoslavia", "LT": "Lithuania", "LV": "Latvia",
+        "AFR": "Africa", "CAR": "Caribbean", "EX": "Ex-Yugoslavia", "LT": "Lithuania", "LV": "Latvia", "FA": "Persian",
         "EE": "Estonia", "AM": "Armenia", "GE": "Georgia", "AZ": "Azerbaijan", "SO": "Somalia", "NG": "Nigeria"
     ]
     static let aliases: [String: String] = [
@@ -131,9 +161,26 @@ enum Country {
         return nil
     }
 
+    /// Language words in movie/series categories and titles ("Persian", "Hindi dubbed").
+    static let languageWords: [(String, String)] = [
+        ("persian", "FA"), ("farsi", "FA"), ("hindi", "IN"), ("bollywood", "IN"), ("punjabi", "IN"), ("tamil", "IN"),
+        ("telugu", "IN"), ("malayalam", "IN"), ("urdu", "PK"), ("turkish", "TR"), ("arabic", "AR"), ("kurdish", "KU"),
+        ("polish", "PL"), ("russian", "RU"), ("german", "DE"), ("french", "FR"), ("spanish", "ES"), ("italian", "IT"),
+        ("dutch", "NL"), ("korean", "KR"), ("japanese", "JP"), ("chinese", "CN"), ("thai", "TH"), ("filipino", "PH"),
+        ("portuguese", "PT"), ("albanian", "AL"), ("greek", "GR"), ("romanian", "RO")
+    ]
+    private static let languageRegex: [(NSRegularExpression, String)] = languageWords.map {
+        (try! NSRegularExpression(pattern: "\\b\($0.0)\\b", options: [.caseInsensitive]), $0.1)
+    }
+
+    static func language(_ s: String) -> String? {
+        let r = NSRange(s.startIndex..., in: s)
+        return languageRegex.first { $0.0.firstMatch(in: s, range: r) != nil }?.1
+    }
+
     static func flag(_ code: String) -> String {
         let iso = code == "UK" ? "GB" : code
-        guard iso.count == 2, names[code] != nil, !["AR", "LA", "EX", "KU"].contains(code) else { return "🌐" }
+        guard iso.count == 2, names[code] != nil, !["AR", "LA", "EX", "KU", "FA"].contains(code) else { return "🌐" }
         return iso.unicodeScalars.compactMap { UnicodeScalar(127397 + $0.value) }.map(String.init).joined()
     }
 

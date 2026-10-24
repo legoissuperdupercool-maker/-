@@ -31,6 +31,8 @@ struct RootView: View {
     @Environment(AppModel.self) private var model
     @State private var tab: Tab = RootView.startTab
     @State private var showSettings = RootView.startScreen == "settings"
+    @AppStorage("intro") private var introOn = true
+    @State private var introDone = false
 
     /// Screenshot runs pick the first screen with `-tab movies` etc.
     static var startTab: Tab {
@@ -48,10 +50,10 @@ struct RootView: View {
 
     var body: some View {
         @Bindable var model = model
-        let cinema = model.uiTheme == .cinema
+        let cinema = model.uiTheme.isCinema
         ZStack(alignment: .top) {
             if cinema {
-                Theme.cinemaBg.ignoresSafeArea()
+                LookBackground().ignoresSafeArea()
             } else {
                 AppBackground(profile: model.profile)
             }
@@ -93,6 +95,22 @@ struct RootView: View {
         .overlay {
             if model.showProfilePicker { ProfilePickerView().transition(.opacity) }
         }
+        .overlay(alignment: .bottom) {
+            // Movies and series still loading in the background.
+            if !model.loading, let status = model.status {
+                HStack(spacing: 10) {
+                    ProgressView().tint(.white)
+                    Text(status).font(.system(size: 14, weight: .medium))
+                }
+                .padding(.horizontal, 16).frame(height: 40)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(.bottom, 18)
+                .transition(.opacity)
+            }
+        }
+        .overlay {
+            if introOn && !introDone && !model.demo { LogoIntro { introDone = true } }
+        }
         .animation(.easeOut(duration: 0.2), value: model.showProfilePicker)
         .onChange(of: model.uiTheme) { if model.uiTheme == .classic && tab == .mylist { tab = .home } }
         .sheet(isPresented: $showSettings) { SettingsView() }
@@ -111,7 +129,8 @@ struct TopBar: View {
     @Binding var showSettings: Bool
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var compact: Bool { sizeClass == .compact }
-    private var cinema: Bool { model.uiTheme == .cinema }
+    private var cinema: Bool { model.uiTheme.isCinema }
+    private var look: UITheme { model.uiTheme }
 
     var body: some View {
         HStack(spacing: cinema ? 2 : 6) {
@@ -122,15 +141,8 @@ struct TopBar: View {
                 HStack(spacing: cinema ? 2 : 6) {
                     ForEach(cinema ? Tab.cinema : Tab.classic) { t in
                         if cinema {
-                            Button { tab = t } label: {
-                                VStack(spacing: 4) {
-                                    Text(t.rawValue).font(.system(size: 16, weight: tab == t ? .bold : .medium))
-                                        .foregroundStyle(tab == t ? Color.white : Color.white.opacity(0.72))
-                                    Capsule().fill(tab == t ? Theme.blue : .clear).frame(width: 22, height: 3)
-                                }
-                                .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
-                            }
-                            .buttonStyle(.plain)
+                            Button { tab = t } label: { CinemaTab(title: t.rawValue, on: tab == t, look: look, compact: compact) }
+                                .buttonStyle(.plain)
                         } else {
                             Button(t.rawValue) { tab = t }
                                 .font(.system(size: 16, weight: .medium))
@@ -141,6 +153,10 @@ struct TopBar: View {
                                 .background(tab == t ? Theme.text : Color.clear, in: Capsule())
                         }
                     }
+                }
+                .padding(look == .glass ? 4 : 0)
+                .background {
+                    if look == .glass { Capsule().fill(.ultraThinMaterial).overlay(Capsule().strokeBorder(.white.opacity(0.15))) }
                 }
             }
             .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
@@ -216,5 +232,48 @@ struct ErrorView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+}
+
+/// A tab in the cinema top bar, drawn per look.
+struct CinemaTab: View {
+    let title: String
+    let on: Bool
+    let look: UITheme
+    let compact: Bool
+
+    var body: some View {
+        switch look {
+        case .glass:
+            Text(title)
+                .font(.system(size: 15, weight: on ? .semibold : .medium))
+                .foregroundStyle(on ? Color.black : Color.white.opacity(0.85))
+                .padding(.horizontal, compact ? 12 : 16).frame(height: 36)
+                .background(on ? Color.white : Color.clear, in: Capsule())
+        case .wonder:
+            VStack(spacing: 5) {
+                Text(title.uppercased())
+                    .font(.system(size: 14, weight: .bold)).tracking(1.6)
+                    .foregroundStyle(on ? Color.white : Color.white.opacity(0.7))
+                Capsule().fill(on ? Color.white : .clear).frame(height: 2)
+            }
+            .fixedSize()
+            .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
+        case .premium:
+            VStack(spacing: 4) {
+                Text(title).font(.system(size: 16, weight: on ? .semibold : .regular))
+                    .foregroundStyle(on ? Color.white : Color.white.opacity(0.7))
+                Capsule().fill(on ? Theme.blue : .clear).frame(height: 3)
+            }
+            .fixedSize()
+            .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
+        default:
+            VStack(spacing: 4) {
+                Text(title).font(.system(size: 16, weight: on ? .bold : .medium))
+                    .foregroundStyle(on ? Color.white : Color.white.opacity(0.72))
+                Capsule().fill(on ? Theme.blue : .clear).frame(width: 22, height: 3)
+            }
+            .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
+        }
     }
 }

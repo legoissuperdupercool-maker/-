@@ -174,11 +174,7 @@ struct ProfileTileStyle: ButtonStyle {
 struct Wordmark: View {
     var size: CGFloat = 22
     var body: some View {
-        HStack(spacing: 0) {
-            Text("ello").font(.system(size: size, weight: .bold))
-            Text(".").font(.system(size: size, weight: .bold)).foregroundStyle(Theme.blue)
-            Text(" smartTV").font(.system(size: size)).foregroundStyle(Theme.dim)
-        }
+        Image("Wordmark").resizable().scaledToFit().frame(height: size * 1.3).accessibilityLabel("ello")
     }
 }
 

@@ -8,7 +8,7 @@ struct HomeView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 30) {
-                if let hero = model.movies.first(where: { $0.plot != nil }) ?? model.movies.first {
+                if let hero = model.shelfMovies.first(where: { $0.plot != nil }) ?? model.shelfMovies.first {
                     HeroCard(channel: hero) { detail = hero }
                 }
                 if !model.continueWatching.isEmpty {
@@ -54,16 +54,16 @@ struct HomeView: View {
                         }
                     }
                 }
-                if !model.movies.isEmpty {
+                if !model.shelfMovies.isEmpty {
                     Rail(title: "New movies", action: ("See all", { tab = .movies })) {
-                        ForEach(newest(model.movies)) { c in
+                        ForEach(newest(model.shelfMovies)) { c in
                             PosterCard(channel: c) { detail = c }
                         }
                     }
                 }
-                if !model.series.isEmpty {
+                if !model.shelfSeries.isEmpty {
                     Rail(title: "Series", action: ("See all", { tab = .series })) {
-                        ForEach(newest(model.series)) { c in
+                        ForEach(newest(model.shelfSeries)) { c in
                             PosterCard(channel: c) { detail = c }
                         }
                     }

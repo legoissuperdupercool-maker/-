@@ -11,7 +11,7 @@ struct CinemaHome: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 26) {
-                Billboard(items: billboardItems(model.movies + model.series)) { detail = $0 }
+                Billboard(items: billboardItems(model.shelfMovies + model.shelfSeries)) { detail = $0 }
                 if !model.continueWatching.isEmpty {
                     CinemaRow(title: "Continue watching for \(model.profile.name)") {
                         ForEach(model.continueWatching) { item in
@@ -19,7 +19,7 @@ struct CinemaHome: View {
                         }
                     }
                 }
-                let topMovies = newest(model.movies, 10)
+                let topMovies = newest(model.shelfMovies, 10)
                 if topMovies.count >= 5 {
                     CinemaRow(title: "Top 10 new movies") {
                         ForEach(Array(topMovies.enumerated()), id: \.element.id) { i, c in
@@ -51,14 +51,14 @@ struct CinemaHome: View {
                         }
                     }
                 }
-                if !model.series.isEmpty {
+                if !model.shelfSeries.isEmpty {
                     CinemaRow(title: "New series", more: { tab = .series }) {
-                        ForEach(newest(model.series, 24)) { c in CinemaPoster(channel: c) { detail = c } }
+                        ForEach(newest(model.shelfSeries, 24)) { c in CinemaPoster(channel: c) { detail = c } }
                     }
                 }
-                if !model.movies.isEmpty {
+                if !model.shelfMovies.isEmpty {
                     CinemaRow(title: "New movies", more: { tab = .movies }) {
-                        ForEach(newest(model.movies, 24)) { c in CinemaPoster(channel: c) { detail = c } }
+                        ForEach(newest(model.shelfMovies, 24)) { c in CinemaPoster(channel: c) { detail = c } }
                     }
                 }
             }
@@ -80,7 +80,11 @@ struct CinemaLibrary: View {
     @State private var detail: Channel?
 
     private var label: String { kind == .movie ? "Movies" : "Series" }
-    private var all: [Channel] { kind == .movie ? model.movies : model.series }
+    /// The rows use the profile's movie/series filters; search looks through everything.
+    private var all: [Channel] {
+        if kind == .movie { return query.isEmpty ? model.shelfMovies : model.movies }
+        return query.isEmpty ? model.shelfSeries : model.series
+    }
 
     var body: some View {
         let sorted = newest(all, all.count)
@@ -313,11 +317,19 @@ struct CinemaPoster: View {
     let open: () -> Void
 
     var body: some View {
+        if let width, Theme.look.wideCards {
+            wide(width * 1.75)
+        } else {
+            poster
+        }
+    }
+
+    private var poster: some View {
         Button(action: open) {
             Artwork(url: channel.logo, name: channel.name)
                 .frame(width: width, height: width.map { $0 * 1.5 })
                 .aspectRatio(2 / 3, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
                 .overlay(alignment: .bottomLeading) {
                     if model.resumePosition(channel.id) != nil {
                         Rectangle().fill(Theme.blue).frame(height: 3)
@@ -325,10 +337,52 @@ struct CinemaPoster: View {
                 }
         }
         .buttonStyle(ProfileTileStyle())
-        .contextMenu {
-            Button(model.inMyList(channel) ? "Remove from My List" : "Add to My List",
-                   systemImage: model.inMyList(channel) ? "minus" : "plus") { model.toggleMyList(channel) }
+        .contextMenu { menu }
+    }
+
+    /// Premium, Wonder and Glass: a wide card. The artwork fills it with the title over a shade
+    /// (Glass puts the title underneath).
+    private func wide(_ w: CGFloat) -> some View {
+        let glass = Theme.look == .glass
+        return Button(action: open) {
+            VStack(alignment: .leading, spacing: 8) {
+                Artwork(url: channel.logo, name: channel.name)
+                    .frame(width: w, height: w * 9 / 16)
+                    .overlay {
+                        if !glass {
+                            LinearGradient(colors: [.black.opacity(0.85), .clear], startPoint: .bottom, endPoint: .center)
+                        }
+                    }
+                    .overlay(alignment: .bottomLeading) {
+                        if !glass {
+                            Text(channel.cleanName).font(.system(size: 15, weight: .bold)).lineLimit(2)
+                                .foregroundStyle(.white).multilineTextAlignment(.leading)
+                                .padding(.horizontal, 12).padding(.bottom, 10)
+                        }
+                    }
+                    .overlay(alignment: .bottom) {
+                        if model.resumePosition(channel.id) != nil { Rectangle().fill(Theme.blue).frame(height: 3) }
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                        .strokeBorder(.white.opacity(Theme.look == .wonder ? 0.18 : 0.06), lineWidth: 1))
+                    .shadow(color: Theme.look == .wonder ? Theme.blue.opacity(0.25) : .black.opacity(0.4), radius: 10, y: 4)
+                if glass {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(channel.cleanName).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                        if let year = channel.year { Text(year).font(.system(size: 12)).foregroundStyle(Theme.dim) }
+                    }
+                    .frame(width: w, alignment: .leading)
+                }
+            }
         }
+        .buttonStyle(ProfileTileStyle())
+        .contextMenu { menu }
+    }
+
+    @ViewBuilder private var menu: some View {
+        Button(model.inMyList(channel) ? "Remove from My List" : "Add to My List",
+               systemImage: model.inMyList(channel) ? "minus" : "plus") { model.toggleMyList(channel) }
     }
 }
 
@@ -350,7 +404,7 @@ struct Top10Card: View {
                     .offset(y: 22)
                 Artwork(url: channel.logo, name: channel.name)
                     .frame(width: 120, height: 180)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
             }
             .padding(.leading, 6)
         }

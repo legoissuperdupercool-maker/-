@@ -127,6 +127,10 @@ struct Profile: Codable, Identifiable, Hashable {
     var hiddenCategories: [String] = []
     var hiddenChannels: [String] = []
     var channelSort: ChannelSort = .provider
+    /// Movies & series: countries/languages and categories kept out of Home, the rows and
+    /// recommendations (search still finds them).
+    var vodHiddenCountries: [String] = []
+    var vodHiddenCategories: [String] = []
 
     init(id: String = UUID().uuidString, name: String, color: UInt32 = 0x1A73E8, emoji: String? = nil, kids: Bool = false, hideAdult: Bool = false) {
         self.id = id
@@ -157,18 +161,53 @@ struct Profile: Codable, Identifiable, Hashable {
         hiddenCategories = try c.decodeIfPresent([String].self, forKey: .hiddenCategories) ?? []
         hiddenChannels = try c.decodeIfPresent([String].self, forKey: .hiddenChannels) ?? []
         channelSort = try c.decodeIfPresent(ChannelSort.self, forKey: .channelSort) ?? .provider
+        vodHiddenCountries = try c.decodeIfPresent([String].self, forKey: .vodHiddenCountries) ?? []
+        vodHiddenCategories = try c.decodeIfPresent([String].self, forKey: .vodHiddenCategories) ?? []
     }
 }
 
-/// The two layouts: big artwork and rows (cinema), or rounded tiles and cards (classic).
+/// The app's looks (same as the Windows app). Theater, Premium, Wonder and Glass share the
+/// cinema screens with their own design; Classic is the original rounded layout.
 enum UITheme: String, Codable, CaseIterable, Identifiable {
-    case cinema, classic
+    case theater, premium, wonder, glass, classic
     var id: String { rawValue }
-    var label: String { self == .cinema ? "Cinema" : "Classic" }
+
+    /// The saved setting ("cinema" was the old name for Theater).
+    init(saved: String?) {
+        self = saved == "cinema" ? .theater : UITheme(rawValue: saved ?? "") ?? .theater
+    }
+
+    var isCinema: Bool { self != .classic }
+    /// Rows of wide 16:9 cards instead of posters.
+    var wideCards: Bool { self == .premium || self == .wonder || self == .glass }
+
+    var label: String {
+        switch self {
+        case .theater: return "Theater"
+        case .premium: return "Premium"
+        case .wonder: return "Wonder"
+        case .glass: return "Glass"
+        case .classic: return "Classic"
+        }
+    }
     var blurb: String {
-        self == .cinema
-            ? "Big artwork at the top, then rows of posters."
-            : "Rounded tiles and cards with a light, airy layout."
+        switch self {
+        case .theater: return "Black, big artwork and rows of posters."
+        case .premium: return "Deep slate, tabs along the top and wide cards."
+        case .wonder: return "A starry blue night with glowing wide cards."
+        case .glass: return "Frosted glass, a floating tab bar and rounded cards."
+        case .classic: return "The original rounded tiles and cards."
+        }
+    }
+    /// The look's own colour, used when the profile hasn't picked one.
+    var accent: UInt32 {
+        switch self {
+        case .theater: return 0xE50914
+        case .premium: return 0x00A8E1
+        case .wonder: return 0x1F80E0
+        case .glass: return 0xF5F5F7
+        case .classic: return 0x4C8DFF
+        }
     }
 }
 
