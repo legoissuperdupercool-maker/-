@@ -60,8 +60,6 @@ struct RootView: View {
             } else {
                 AppBackground(profile: model.profile)
             }
-            HStack(spacing: 0) {
-            if rail { SideRail(tab: $tab, showSettings: $showSettings) }
             VStack(spacing: 0) {
                 if !rail && (!cinema || !fullBleed) { TopBar(tab: $tab, showSettings: $showSettings) }
                 if model.sources.isEmpty {
@@ -90,12 +88,17 @@ struct RootView: View {
                     }
                 }
             }
-            }
+            // Theater on iPad: room for the side menu along the left edge.
+            .padding(.leading, rail ? 72 : 0)
             // Cinema pages with a billboard run under a see-through top bar.
             if cinema && fullBleed && !rail {
                 TopBar(tab: $tab, showSettings: $showSettings)
                     .background(LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .top, endPoint: .bottom).ignoresSafeArea())
             }
+        }
+        // The side menu, fixed to the left edge of the screen for the full height.
+        .overlay(alignment: .leading) {
+            if rail { SideRail(tab: $tab, showSettings: $showSettings).ignoresSafeArea() }
         }
         .id(model.accentVersion)
         .overlay {
@@ -275,9 +278,10 @@ struct SideRail: View {
             .foregroundStyle(.white.opacity(0.7))
             .padding(.bottom, 14)
         }
+        .padding(.vertical, 20)
         .frame(width: 72)
         .frame(maxHeight: .infinity)
-        .background(LinearGradient(colors: [.black, .black.opacity(0.85)], startPoint: .leading, endPoint: .trailing).ignoresSafeArea())
+        .background(LinearGradient(colors: [.black, .black.opacity(0.88)], startPoint: .leading, endPoint: .trailing))
     }
 }
 
