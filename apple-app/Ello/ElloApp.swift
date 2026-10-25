@@ -182,7 +182,7 @@ struct TopBar: View {
     var body: some View {
         HStack(spacing: cinema ? 2 : 6) {
             if !compact {
-                Wordmark(size: 22).padding(.trailing, 18)
+                Wordmark(size: 22 * UI.s).padding(.trailing, 18)
             }
             if look == .glass && !compact {
                 // Glass: the tab bar floats in the middle.
@@ -356,15 +356,15 @@ struct CinemaTab: View {
         switch look {
         case .glass:
             Text(item.label)
-                .font(.system(size: 15, weight: on ? .semibold : .medium))
+                .font(.system(size: 15 * UI.s, weight: on ? .semibold : .medium))
                 .foregroundStyle(on ? Color.black : Color.white.opacity(0.85))
                 .padding(.horizontal, compact ? 12 : 16).frame(height: 36)
                 .background(on ? Color.white : Color.clear, in: Capsule())
         case .wonder:
             VStack(spacing: 5) {
                 HStack(spacing: 7) {
-                    Image(systemName: item.icon).font(.system(size: 14, weight: .bold))
-                    Text(item.label.uppercased()).font(.system(size: 14, weight: .bold)).tracking(1.6)
+                    Image(systemName: item.icon).font(.system(size: 14 * UI.s, weight: .bold))
+                    Text(item.label.uppercased()).font(.system(size: 14 * UI.s, weight: .bold)).tracking(1.6)
                 }
                 .foregroundStyle(on ? Color.white : Color.white.opacity(0.75))
                 Capsule().fill(on ? Color.white : .clear).frame(height: 2)
@@ -373,7 +373,7 @@ struct CinemaTab: View {
             .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
         case .premium:
             VStack(spacing: 4) {
-                Text(item.label).font(.system(size: 16, weight: on ? .semibold : .regular))
+                Text(item.label).font(.system(size: 16 * UI.s, weight: on ? .semibold : .regular))
                     .foregroundStyle(on ? Color.white : Color.white.opacity(0.7))
                 Capsule().fill(on ? Color.white : .clear).frame(height: 2)
             }
@@ -381,7 +381,7 @@ struct CinemaTab: View {
             .padding(.horizontal, compact ? 8 : 12).frame(height: 44)
         default:
             VStack(spacing: 4) {
-                Text(item.label).font(.system(size: 16, weight: on ? .bold : .medium))
+                Text(item.label).font(.system(size: 16 * UI.s, weight: on ? .bold : .medium))
                     .foregroundStyle(on ? Color.white : Color.white.opacity(0.72))
                 Capsule().fill(on ? Theme.blue : .clear).frame(width: 22, height: 3)
             }

@@ -114,11 +114,11 @@ struct CinemaLibrary: View {
                     header.padding(.top, 108)
                     let shown = sorted.filter { (genre == nil || $0.group == genre) && (query.isEmpty || $0.name.localizedCaseInsensitiveContains(query)) }
                     Text("\(genre.flatMap { g in model.categories(kind).first { $0.id == g }?.name } ?? "Results") · \(shown.count)")
-                        .font(.system(size: 15)).foregroundStyle(Theme.dim).padding(.horizontal, 28)
+                        .font(.system(size: 15)).foregroundStyle(Theme.dim).padding(.horizontal, UI.margin)
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 120), spacing: 10)], spacing: 16) {
                         ForEach(shown) { c in CinemaPoster(channel: c, width: nil) { detail = c } }
                     }
-                    .padding(.horizontal, 28)
+                    .padding(.horizontal, UI.margin)
                 }
             }
             .padding(.bottom, 40)
@@ -164,7 +164,7 @@ struct CinemaLibrary: View {
             .tint(.white)
             SearchField(text: $query, prompt: "Search \(label.lowercased())").frame(maxWidth: 300)
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, UI.margin)
     }
 
     private func rows(_ sorted: [Channel]) -> [(id: String, title: String, items: [Channel])] {
@@ -195,7 +195,7 @@ struct CinemaMyList: View {
                     }
                 }
             }
-            .padding(.horizontal, 28).padding(.vertical, 12)
+            .padding(.horizontal, UI.margin).padding(.vertical, 12)
         }
         .sheet(item: $detail) { c in DetailView(channel: c) }
     }
@@ -214,7 +214,7 @@ struct Billboard: View {
     private var inset: Bool { Theme.look == .premium || Theme.look == .wonder }
 
     var body: some View {
-        let height: CGFloat = sizeClass == .compact ? 480 : 560
+        let height: CGFloat = sizeClass == .compact ? 480 : (UI.s > 1 ? 720 : 560)
         ZStack(alignment: .bottomLeading) {
             if items.isEmpty {
                 Theme.cinemaBg
@@ -246,7 +246,7 @@ struct Billboard: View {
                             .foregroundStyle(Theme.onAccent)
                         Text("NEW ON ELLO").font(.system(size: 13, weight: .semibold)).tracking(1.5)
                     }
-                    Text(c.cleanName).font(.system(size: sizeClass == .compact ? 34 : 50, weight: .heavy)).lineLimit(2)
+                    Text(c.cleanName).font(.system(size: sizeClass == .compact ? 34 : 50 * UI.s, weight: .heavy)).lineLimit(2)
                         .shadow(color: .black.opacity(0.5), radius: 10)
                     let meta = [c.year, c.genre, c.rating.map { String(format: "★ %.1f", $0) }].compactMap { $0 }
                     if !meta.isEmpty { Text(meta.joined(separator: "  ·  ")).foregroundStyle(Theme.text.opacity(0.85)) }
@@ -276,7 +276,7 @@ struct Billboard: View {
                         .padding(.top, 6)
                     }
                 }
-                .padding(.horizontal, 28)
+                .padding(.horizontal, UI.margin)
                 .padding(.bottom, 26)
             }
         }
@@ -314,20 +314,20 @@ struct CinemaRow<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 8) {
-                Text(title).font(.system(size: 20, weight: .bold))
+                Text(title).font(.system(size: 20 * UI.s, weight: .bold))
                 if let more {
                     Button(action: more) {
                         HStack(spacing: 2) {
-                            Text("Explore all").font(.system(size: 13, weight: .semibold))
+                            Text("Explore all").font(.system(size: 13 * UI.s, weight: .semibold))
                             Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
                         }
                         .foregroundStyle(Theme.blue)
                     }
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, UI.margin)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 8) { content() }.padding(.horizontal, 28)
+                LazyHStack(spacing: 8 * UI.s) { content() }.padding(.horizontal, UI.margin)
             }
         }
     }
@@ -337,7 +337,7 @@ struct CinemaRow<Content: View>: View {
 struct CinemaPoster: View {
     @Environment(AppModel.self) private var model
     let channel: Channel
-    var width: CGFloat? = 140
+    var width: CGFloat? = 140 * UI.s
     let open: () -> Void
 
     var body: some View {
@@ -379,7 +379,7 @@ struct CinemaPoster: View {
                     }
                     .overlay(alignment: .bottomLeading) {
                         if !glass {
-                            Text(channel.cleanName).font(.system(size: 15, weight: .bold)).lineLimit(2)
+                            Text(channel.cleanName).font(.system(size: 15 * UI.s, weight: .bold)).lineLimit(2)
                                 .foregroundStyle(.white).multilineTextAlignment(.leading)
                                 .padding(.horizontal, 12).padding(.bottom, 10)
                         }
@@ -393,7 +393,7 @@ struct CinemaPoster: View {
                     .shadow(color: Theme.look == .wonder ? Theme.blue.opacity(0.25) : .black.opacity(0.4), radius: 10, y: 4)
                 if glass {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(channel.cleanName).font(.system(size: 14, weight: .semibold)).lineLimit(1)
+                        Text(channel.cleanName).font(.system(size: 14 * UI.s, weight: .semibold)).lineLimit(1)
                         if let year = channel.year { Text(year).font(.system(size: 12)).foregroundStyle(Theme.dim) }
                     }
                     .frame(width: w, alignment: .leading)
@@ -431,14 +431,14 @@ struct Top10Card: View {
         Button(action: open) {
             HStack(alignment: .bottom, spacing: -22) {
                 Text("\(rank)")
-                    .font(.system(size: 150, weight: .black))
+                    .font(.system(size: 150 * UI.s, weight: .black))
                     .foregroundStyle(Theme.cinemaBg)
                     .shadow(color: .white.opacity(0.85), radius: 0, x: 1.5, y: 1.5)
                     .shadow(color: .white.opacity(0.85), radius: 0, x: -1.5, y: -1.5)
-                    .frame(height: 160, alignment: .bottom)
+                    .frame(height: 160 * UI.s, alignment: .bottom)
                     .offset(y: 22)
                 Artwork(url: channel.logo, name: channel.name)
-                    .frame(width: 120, height: 180)
+                    .frame(width: 120 * UI.s, height: 180 * UI.s)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius))
             }
             .padding(.leading, 6)
@@ -482,11 +482,11 @@ struct Collections: View {
                 ForEach(tiles, id: \.label) { t in
                     Button { tab = t.tab } label: {
                         VStack(spacing: 8) {
-                            Image(systemName: t.icon).font(.system(size: 24, weight: .semibold))
-                            Text(t.label.uppercased()).font(.system(size: 14, weight: .heavy)).tracking(2)
+                            Image(systemName: t.icon).font(.system(size: 24 * UI.s, weight: .semibold))
+                            Text(t.label.uppercased()).font(.system(size: 14 * UI.s, weight: .heavy)).tracking(2)
                         }
                         .foregroundStyle(.white)
-                        .frame(width: 190, height: 100)
+                        .frame(width: 190 * UI.s, height: 100 * UI.s)
                         .background(LinearGradient(colors: [Color(hex: t.from), Color(hex: t.to)], startPoint: .topLeading, endPoint: .bottomTrailing),
                                     in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(.white.opacity(0.18), lineWidth: 1.5))
@@ -495,7 +495,7 @@ struct Collections: View {
                     .buttonStyle(ProfileTileStyle())
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, UI.margin)
         }
     }
 }

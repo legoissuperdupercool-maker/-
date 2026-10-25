@@ -56,9 +56,9 @@ struct PhotosPicker<Label: View>: View {
 /// system's white block.
 struct ElloButtonStyle: ButtonStyle {
     var ring = true
-    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration, ring: ring) }
+    func makeBody(configuration: Configuration) -> some View { StyledLabel(configuration: configuration, ring: ring) }
 
-    private struct Body: View {
+    struct StyledLabel: View {
         let configuration: ButtonStyleConfiguration
         let ring: Bool
         @Environment(\.isFocused) private var focused
@@ -85,4 +85,15 @@ extension ButtonStyle where Self == ElloButtonStyle {
     static var ello: ElloButtonStyle { ElloButtonStyle() }
     /// Same, without the ring (posters, menu icons: they grow and glow only).
     static var elloPlain: ElloButtonStyle { ElloButtonStyle(ring: false) }
+}
+
+/// Sizes on a TV: everything is seen from the couch, so text, cards and spacing are bigger.
+enum UI {
+    #if os(tvOS)
+    static let s: CGFloat = 1.6
+    #else
+    static let s: CGFloat = 1
+    #endif
+    /// Side margin of pages.
+    static var margin: CGFloat { 28 * s * (s > 1 ? 1.3 : 1) }
 }

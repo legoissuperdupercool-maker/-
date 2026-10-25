@@ -174,9 +174,9 @@ struct ChannelCard: View {
                             .frame(maxWidth: .infinity, alignment: .trailing)
                     }
                 }
-                .frame(width: 200, height: 112)
-                Text(channel.name).font(.system(size: 14, weight: .semibold)).lineLimit(1)
-                    .padding(.horizontal, 12).frame(width: 200, height: 40, alignment: .leading)
+                .frame(width: 200 * UI.s, height: 112 * UI.s)
+                Text(channel.name).font(.system(size: 14 * UI.s, weight: .semibold)).lineLimit(1)
+                    .padding(.horizontal, 12).frame(width: 200 * UI.s, height: 40 * UI.s, alignment: .leading)
             }
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
@@ -192,15 +192,15 @@ struct ContinueCard: View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
-                    Artwork(url: item.poster, name: item.title).frame(width: 260, height: 146)
-                    Rectangle().fill(Theme.blue).frame(width: 260 * min(1, item.position / max(1, item.duration)), height: 4)
+                    Artwork(url: item.poster, name: item.title).frame(width: 260 * UI.s, height: 146 * UI.s)
+                    Rectangle().fill(Theme.blue).frame(width: 260 * UI.s * min(1, item.position / max(1, item.duration)), height: 4)
                 }
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(item.title).font(.system(size: 15, weight: .semibold)).lineLimit(1)
+                    Text(item.title).font(.system(size: 15 * UI.s, weight: .semibold)).lineLimit(1)
                     Text(item.subtitle ?? "\(max(1, Int((item.duration - item.position) / 60))) min left")
-                        .font(.system(size: 13)).foregroundStyle(Theme.dim).lineLimit(1)
+                        .font(.system(size: 13 * UI.s)).foregroundStyle(Theme.dim).lineLimit(1)
                 }
-                .padding(12).frame(width: 260, alignment: .leading)
+                .padding(12).frame(width: 260 * UI.s, alignment: .leading)
             }
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))

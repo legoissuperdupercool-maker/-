@@ -164,9 +164,9 @@ struct ProfilePickerView: View {
 
 /// Pressed/focused tiles get a white ring around the picture.
 struct ProfileTileStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration) }
+    func makeBody(configuration: Configuration) -> some View { StyledLabel(configuration: configuration) }
 
-    private struct Body: View {
+    struct StyledLabel: View {
         let configuration: ButtonStyleConfiguration
         @Environment(\.isFocused) private var focused
         var body: some View {
