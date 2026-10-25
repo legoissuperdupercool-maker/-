@@ -345,6 +345,52 @@ struct SideRail: View {
     }
 }
 
+struct WelcomeView: View {
+    @Binding var showSettings: Bool
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer()
+            Image("Logo").resizable().frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 22))
+            Text("Welcome to ello smartTV").font(.system(size: 32, weight: .semibold))
+            Text("Add your IPTV provider to get started: an Xtream Codes login or an M3U playlist.")
+                .font(.system(size: 17)).foregroundStyle(Theme.dim).multilineTextAlignment(.center).frame(maxWidth: 520)
+            Button("Add a source") { showSettings = true }.buttonStyle(PillButtonStyle(primary: true)).padding(.top, 8)
+            Spacer()
+        }
+        .padding()
+    }
+}
+
+struct LoadingView: View {
+    let text: String
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            ProgressView().bigSpinner().tint(Theme.blue)
+            Text(text).foregroundStyle(Theme.dim)
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+    }
+}
+
+struct ErrorView: View {
+    @Environment(AppModel.self) private var model
+    let text: String
+    var body: some View {
+        VStack(spacing: 16) {
+            Spacer()
+            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 40)).foregroundStyle(Theme.bad)
+            Text("Couldn’t load your source").font(.system(size: 22, weight: .semibold))
+            Text(text).foregroundStyle(Theme.dim).multilineTextAlignment(.center).frame(maxWidth: 520)
+            Button("Try again") { Task { await model.load(force: true) } }.buttonStyle(PillButtonStyle(primary: true))
+            Spacer()
+        }
+        .frame(maxWidth: .infinity)
+        .padding()
+    }
+}
+
 /// A tab in the cinema top bar, drawn per look.
 struct CinemaTab: View {
     let item: NavItem
