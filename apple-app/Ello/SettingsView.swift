@@ -76,7 +76,7 @@ struct SettingsView: View {
                         }
                         .foregroundStyle(Theme.text)
                     }
-                    .onDelete { idx in idx.map { model.sources[$0] }.forEach(model.remove) }
+                    .deletable { idx in idx.map { model.sources[$0] }.forEach(model.remove) }
                     Button { adding = true } label: { Label("Add source", systemImage: "plus.circle.fill") }
                 }
                 Section("Profiles") {

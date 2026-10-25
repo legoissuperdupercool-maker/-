@@ -1,5 +1,7 @@
 import SwiftUI
+#if os(iOS)
 import PhotosUI
+#endif
 
 /// ello's drawn characters (same set as the Windows app). Images live in the
 /// asset catalogue as "avatar-<id>".

@@ -34,6 +34,13 @@ jobs:
           mv "$(find vlc -name MobileVLCKit.xcframework -type d | head -1)" Frameworks/
           rm -rf vlc vlc.tar.xz
           ls Frameworks/MobileVLCKit.xcframework
+          # The Apple TV edition of the same library.
+          curl -fsSL -o tvvlc.tar.xz https://download.videolan.org/pub/cocoapods/prod/TVVLCKit-3.7.3-319ed2c0-79128878.tar.xz
+          mkdir -p tvvlc
+          tar -xJf tvvlc.tar.xz -C tvvlc
+          mv "$(find tvvlc -name TVVLCKit.xcframework -type d | head -1)" Frameworks/
+          rm -rf tvvlc tvvlc.tar.xz
+          ls Frameworks/TVVLCKit.xcframework
 
       - name: Generate Xcode project
         run: |
@@ -50,6 +57,19 @@ jobs:
           mkdir -p out/Payload
           cp -R "build/device/Build/Products/Release-iphoneos/ello smartTV.app" out/Payload/
           (cd out && zip -qry "ello-smartTV-iOS-0.1.${{ github.run_number }}.ipa" Payload)
+          ls -la out
+
+      # Apple TV build; if it fails, the iPad/iPhone app is still published.
+      - name: Build for Apple TV (unsigned)
+        continue-on-error: true
+        run: |
+          xcodebuild -project Ello.xcodeproj -scheme ElloTV -configuration Release -sdk appletvos \
+            -derivedDataPath build/tv CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            MARKETING_VERSION="0.1.${{ github.run_number }}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            build -quiet
+          mkdir -p tvout/Payload
+          cp -R "build/tv/Build/Products/Release-appletvos/ello smartTV.app" tvout/Payload/
+          (cd tvout && zip -qry "../out/ello-smartTV-tvOS-0.1.${{ github.run_number }}.ipa" Payload)
           ls -la out
 
       - name: Screenshots in the iPad simulator

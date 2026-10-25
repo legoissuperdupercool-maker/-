@@ -306,7 +306,7 @@ struct LoadingView: View {
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            ProgressView().controlSize(.large).tint(Theme.blue)
+            ProgressView().bigSpinner().tint(Theme.blue)
             Text(text).foregroundStyle(Theme.dim)
             Spacer()
         }

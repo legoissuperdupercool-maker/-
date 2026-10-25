@@ -1,6 +1,10 @@
 import SwiftUI
 import AVKit
+#if os(tvOS)
+import TVVLCKit
+#else
 import MobileVLCKit
+#endif
 
 /// Full-screen player. HLS / MP4 play in Apple's player (AirPlay, picture in
 /// picture); MKV, TS, AVI and anything Apple's player can't open play in VLC,
@@ -58,7 +62,7 @@ struct PlayerView: View {
                 .foregroundStyle(.white).padding(20)
             }
         }
-        .statusBarHidden()
+        .hideStatusBar()
         .persistentSystemOverlays(.hidden)
     }
 
@@ -86,8 +90,10 @@ private struct ApplePlayer: UIViewControllerRepresentable {
         ]))
         let player = AVPlayer(playerItem: item)
         vc.player = player
+        #if os(iOS)
         vc.allowsPictureInPicturePlayback = true
         vc.canStartPictureInPictureAutomaticallyFromInline = true
+        #endif
         context.coordinator.attach(player, item: item, start: start)
         player.play()
         return vc
@@ -338,13 +344,26 @@ private struct VLCPlayerScreen: View {
             .onTapGesture { if controls { controls = false } else { reveal() } }
             if engine.buffering || engine.reconnecting {
                 VStack(spacing: 12) {
-                    ProgressView().controlSize(.large).tint(.white)
+                    ProgressView().bigSpinner().tint(.white)
                     if engine.reconnecting { Text("Reconnecting…").font(.system(size: 15, weight: .medium)).foregroundStyle(.white.opacity(0.85)) }
                 }
             }
             if controls { overlay.transition(.opacity) }
         }
         .animation(.easeOut(duration: 0.2), value: controls)
+        #if os(tvOS)
+        // Siri Remote: play/pause, left/right = 10 s back/forward, Menu = close.
+        .onPlayPauseCommand { engine.toggle(); reveal() }
+        .onMoveCommand { direction in
+            switch direction {
+            case .left where !isLive: engine.skip(-10)
+            case .right where !isLive: engine.skip(10)
+            default: break
+            }
+            reveal()
+        }
+        .onExitCommand { onClose() }
+        #endif
         .onAppear { reveal() }
         .onChange(of: engine.time) {
             if Date().timeIntervalSince(lastSave) > 10 { save() }
@@ -453,6 +472,7 @@ private struct VLCPlayerScreen: View {
                 }
                 .frame(maxHeight: .infinity)
                 .contentShape(Rectangle())
+                #if os(iOS)
                 .gesture(DragGesture(minimumDistance: 0)
                     .onChanged { g in
                         dragging = min(max(g.location.x / geo.size.width, 0), 1)
@@ -463,6 +483,7 @@ private struct VLCPlayerScreen: View {
                         dragging = nil
                         reveal()
                     })
+                #endif
             }
             .frame(height: 30)
             HStack {
