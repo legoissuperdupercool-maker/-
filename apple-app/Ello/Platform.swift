@@ -50,3 +50,39 @@ struct PhotosPicker<Label: View>: View {
     var body: some View { EmptyView() }
 }
 #endif
+
+/// Buttons without a frame of their own. On iPad they dim when pressed; on Apple TV the
+/// selected one grows a little with a glow and a ring in the look's colour, instead of the
+/// system's white block.
+struct ElloButtonStyle: ButtonStyle {
+    var ring = true
+    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration, ring: ring) }
+
+    private struct Body: View {
+        let configuration: ButtonStyleConfiguration
+        let ring: Bool
+        @Environment(\.isFocused) private var focused
+        var body: some View {
+            #if os(tvOS)
+            configuration.label
+                .scaleEffect(focused ? 1.08 : 1)
+                .shadow(color: .black.opacity(focused ? 0.6 : 0), radius: 18, y: 8)
+                .overlay {
+                    if ring && focused {
+                        RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(Theme.blue, lineWidth: 4).padding(-8)
+                    }
+                }
+                .animation(.easeOut(duration: 0.15), value: focused)
+            #else
+            configuration.label
+                .opacity(configuration.isPressed ? 0.7 : 1)
+            #endif
+        }
+    }
+}
+
+extension ButtonStyle where Self == ElloButtonStyle {
+    static var ello: ElloButtonStyle { ElloButtonStyle() }
+    /// Same, without the ring (posters, menu icons: they grow and glow only).
+    static var elloPlain: ElloButtonStyle { ElloButtonStyle(ring: false) }
+}

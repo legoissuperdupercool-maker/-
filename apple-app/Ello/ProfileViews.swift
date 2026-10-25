@@ -143,7 +143,7 @@ struct ProfilePickerView: View {
                         .background(manage ? Color.white : .clear)
                         .overlay(Rectangle().strokeBorder(manage ? .white : Color(hex: 0x808080), lineWidth: 1))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.ello)
                 .padding(.top, 46)
                 Spacer()
                 Spacer()
@@ -164,11 +164,20 @@ struct ProfilePickerView: View {
 
 /// Pressed/focused tiles get a white ring around the picture.
 struct ProfileTileStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.96 : 1)
-            .opacity(configuration.isPressed ? 0.85 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+    func makeBody(configuration: Configuration) -> some View { Body(configuration: configuration) }
+
+    private struct Body: View {
+        let configuration: ButtonStyleConfiguration
+        @Environment(\.isFocused) private var focused
+        var body: some View {
+            configuration.label
+                // Apple TV: the selected card grows with a glow (no white block).
+                .scaleEffect(configuration.isPressed ? 0.96 : (focused ? 1.1 : 1))
+                .shadow(color: .black.opacity(focused ? 0.7 : 0), radius: 20, y: 10)
+                .opacity(configuration.isPressed ? 0.85 : 1)
+                .animation(.easeOut(duration: 0.15), value: focused)
+                .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        }
     }
 }
 
@@ -213,7 +222,7 @@ struct ProfileEditor: View {
                                         .padding(8)
                                 }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.ello)
                         fields
                     }
                     .padding(.vertical, 22)
@@ -275,7 +284,7 @@ struct ProfileEditor: View {
                                     .strokeBorder(.white, lineWidth: Theme.accentValue(profile.accent) == a.hex ? 3 : 0).padding(-4))
                                 .padding(4)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.ello)
                         .accessibilityLabel(a.name)
                     }
                 }
@@ -292,7 +301,7 @@ struct ProfileEditor: View {
                                 Text(b.name).font(.system(size: 12)).foregroundStyle(profile.background == b.id ? .white : Theme.dim)
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.ello)
                     }
                     PhotosPicker(selection: $photo, matching: .images) {
                         VStack(alignment: .leading, spacing: 6) {
@@ -302,7 +311,7 @@ struct ProfileEditor: View {
                             Text(profile.background == "photo" ? "Change photo" : "Your photo").font(.system(size: 12)).foregroundStyle(Theme.dim)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.ello)
                 }
                 .padding(.vertical, 4)
             }
@@ -375,7 +384,7 @@ struct AvatarChooser: View {
                     Button { dismiss() } label: {
                         Image(systemName: "arrow.left").font(.system(size: 22, weight: .semibold)).frame(width: 44, height: 44)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.ello)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Choose a profile picture").font(.system(size: sizeClass == .compact ? 22 : 30, weight: .medium))
                         Text("for \(profile.name.isEmpty ? "New profile" : profile.name)").font(.system(size: 15)).foregroundStyle(Theme.dim)
@@ -398,7 +407,7 @@ struct AvatarChooser: View {
                                 .frame(width: tile, height: tile)
                                 .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: tile * 0.12, style: .continuous))
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.ello)
                             if current == "photo" {
                                 Avatar(profile: profile, size: tile, photoVersion: photoVersion)
                                     .overlay(RoundedRectangle(cornerRadius: tile * 0.12 + 4, style: .continuous).strokeBorder(Theme.blue, lineWidth: 3).padding(-4))

@@ -141,7 +141,7 @@ struct CountryChips: View {
                 .foregroundStyle(on ? Color.black : Theme.dim)
                 .background(on ? Theme.text : Theme.surface, in: Capsule())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }
 
@@ -260,7 +260,7 @@ struct CategoryRow: View {
             .background(selected ? Theme.text : Color.clear, in: RoundedRectangle(cornerRadius: 12))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }
 

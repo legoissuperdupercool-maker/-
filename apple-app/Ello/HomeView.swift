@@ -109,7 +109,7 @@ struct HeroCard: View {
                 in: RoundedRectangle(cornerRadius: 24)
             )
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
         .padding(.horizontal, 28)
     }
 }
@@ -150,7 +150,7 @@ struct PosterCard: View {
                 Text(channel.cleanName).font(.system(size: 14, weight: .medium)).lineLimit(1).frame(width: width, alignment: .leading)
             }
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }
 
@@ -181,7 +181,7 @@ struct ChannelCard: View {
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }
 
@@ -205,6 +205,6 @@ struct ContinueCard: View {
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }

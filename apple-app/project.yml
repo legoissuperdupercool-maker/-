@@ -52,6 +52,10 @@ targets:
       - path: Ello
         excludes:
           - "Info.plist"
+      # The Apple TV icon (layered) and Top Shelf banners.
+      - path: ElloTV
+        excludes:
+          - "Info.plist"
     dependencies:
       # Downloaded by CI (see .github/workflows/apple-app.yml).
       - framework: Frameworks/TVVLCKit.xcframework
@@ -63,7 +67,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: ello smartTV
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: "App Icon & Top Shelf Image"
     info:
       path: ElloTV/Info.plist
       properties:

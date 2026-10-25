@@ -262,7 +262,7 @@ struct Billboard: View {
                             Image(systemName: model.inMyList(c) ? "checkmark" : "plus").font(.system(size: 18, weight: .semibold))
                                 .frame(width: 44, height: 44).overlay(Circle().strokeBorder(.white.opacity(0.7), lineWidth: 2))
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.ello)
                     }
                     .padding(.top, 4)
                     if items.count > 1 {

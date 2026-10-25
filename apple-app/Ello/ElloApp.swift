@@ -89,7 +89,7 @@ struct RootView: View {
                 }
             }
             // Theater on iPad: room for the side menu along the left edge.
-            .padding(.leading, rail ? 72 : 0)
+            .padding(.leading, rail ? SideRail.width : 0)
             // Cinema pages with a billboard run under a see-through top bar.
             if cinema && fullBleed && !rail {
                 TopBar(tab: $tab, showSettings: $showSettings)
@@ -98,7 +98,14 @@ struct RootView: View {
         }
         // The side menu, fixed to the left edge of the screen for the full height.
         .overlay(alignment: .leading) {
-            if rail { SideRail(tab: $tab, showSettings: $showSettings).ignoresSafeArea() }
+            if rail {
+                #if os(tvOS)
+                // TVs cut off the edges: the menu stays in the safe area (its backdrop runs to the edge).
+                SideRail(tab: $tab, showSettings: $showSettings)
+                #else
+                SideRail(tab: $tab, showSettings: $showSettings).ignoresSafeArea()
+                #endif
+            }
         }
         .id(model.accentVersion)
         .overlay {
@@ -219,7 +226,7 @@ struct TopBar: View {
             if cinema {
                 ForEach(NavItem.items(look)) { item in
                     Button { tab = item.tab } label: { CinemaTab(item: item, on: tab == item.tab, look: look, compact: compact) }
-                        .buttonStyle(.plain)
+                        .buttonStyle(.ello)
                 }
             } else {
                 ForEach(Tab.classic) { t in
@@ -240,94 +247,101 @@ struct TopBar: View {
     }
 }
 
-/// Theater on iPad: the side menu of icons, like the Windows app's.
+/// Theater: the side menu of icons, like the Windows app's. On Apple TV it is bigger and
+/// opens out with the names while you're in it (as Netflix does there).
 struct SideRail: View {
     @Environment(AppModel.self) private var model
     @Binding var tab: Tab
     @Binding var showSettings: Bool
+    @FocusState private var focus: String?
+
+    #if os(tvOS)
+    static let width: CGFloat = 130
+    private let icon: CGFloat = 34
+    private let row: CGFloat = 84
+    #else
+    static let width: CGFloat = 72
+    private let icon: CGFloat = 21
+    private let row: CGFloat = 52
+    #endif
+
+    private var open: Bool {
+        #if os(tvOS)
+        return focus != nil
+        #else
+        return false
+        #endif
+    }
 
     var body: some View {
-        VStack(spacing: 6) {
-            Button { model.showProfilePicker = true } label: { Avatar(profile: model.profile, size: 38) }
-                .padding(.top, 18).padding(.bottom, 26)
-            ForEach(NavItem.items(.theater)) { item in
-                Button { tab = item.tab } label: {
-                    Image(systemName: item.icon)
-                        .font(.system(size: 21, weight: .semibold))
-                        .foregroundStyle(tab == item.tab ? Color.white : Color.white.opacity(0.55))
-                        .frame(width: 72, height: 52)
-                        .overlay(alignment: .leading) {
-                            if tab == item.tab { Capsule().fill(Theme.blue).frame(width: 3, height: 24) }
-                        }
+        VStack(alignment: .leading, spacing: 6) {
+            Button { model.showProfilePicker = true } label: {
+                HStack(spacing: 18) {
+                    Avatar(profile: model.profile, size: icon + 18)
+                    if open { Text(model.profile.name).font(.system(size: icon * 0.75, weight: .semibold)) }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(item.label)
+                .frame(minWidth: Self.width, alignment: open ? .leading : .center)
+                .padding(.leading, open ? 26 : 0)
+            }
+            .buttonStyle(.elloPlain)
+            .focused($focus, equals: "profile")
+            .padding(.top, 18).padding(.bottom, 26)
+            ForEach(NavItem.items(.theater)) { item in
+                Button { tab = item.tab } label: { entry(item.icon, item.label, on: tab == item.tab, key: item.id) }
+                    .buttonStyle(.elloPlain)
+                    .focused($focus, equals: item.id)
+                    .accessibilityLabel(item.label)
             }
             Spacer()
             if model.sources.count > 1 {
                 Menu {
                     ForEach(model.sources) { s in Button(s.name) { model.select(s.id) } }
                 } label: {
-                    Image(systemName: "antenna.radiowaves.left.and.right").font(.system(size: 19)).frame(width: 72, height: 48)
+                    entry("antenna.radiowaves.left.and.right", model.currentSource?.name ?? "Source", on: false, key: "source")
                 }
-                .tint(.white.opacity(0.7))
+                .focused($focus, equals: "source")
             }
-            Button { showSettings = true } label: {
-                Image(systemName: "gearshape.fill").font(.system(size: 21)).frame(width: 72, height: 52)
-            }
-            .foregroundStyle(.white.opacity(0.7))
-            .padding(.bottom, 14)
+            Button { showSettings = true } label: { entry("gearshape.fill", "Settings", on: false, key: "settings") }
+                .buttonStyle(.elloPlain)
+                .focused($focus, equals: "settings")
+                .padding(.bottom, 14)
         }
         .padding(.vertical, 20)
-        .frame(width: 72)
+        .frame(width: open ? 360 : Self.width, alignment: .leading)
         .frame(maxHeight: .infinity)
-        .background(LinearGradient(colors: [.black, .black.opacity(0.88)], startPoint: .leading, endPoint: .trailing))
-    }
-}
-
-struct WelcomeView: View {
-    @Binding var showSettings: Bool
-    var body: some View {
-        VStack(spacing: 18) {
-            Spacer()
-            Image("Logo").resizable().frame(width: 96, height: 96).clipShape(RoundedRectangle(cornerRadius: 22))
-            Text("Welcome to ello smartTV").font(.system(size: 32, weight: .semibold))
-            Text("Add your IPTV provider to get started: an Xtream Codes login or an M3U playlist.")
-                .font(.system(size: 17)).foregroundStyle(Theme.dim).multilineTextAlignment(.center).frame(maxWidth: 520)
-            Button("Add a source") { showSettings = true }.buttonStyle(PillButtonStyle(primary: true)).padding(.top, 8)
-            Spacer()
+        .background {
+            LinearGradient(colors: open ? [.black, .black.opacity(0.92), .black.opacity(0.0)] : [.black, .black.opacity(0.88)],
+                           startPoint: .leading, endPoint: .trailing)
+                .frame(width: open ? 560 : Self.width)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .ignoresSafeArea()
         }
-        .padding()
+        .animation(.easeOut(duration: 0.2), value: open)
+        #if os(tvOS)
+        .focusSection()
+        #endif
     }
-}
 
-struct LoadingView: View {
-    let text: String
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            ProgressView().bigSpinner().tint(Theme.blue)
-            Text(text).foregroundStyle(Theme.dim)
-            Spacer()
+    private func entry(_ symbol: String, _ label: String, on: Bool, key: String) -> some View {
+        let lit = on || focus == key
+        return HStack(spacing: 22) {
+            Image(systemName: symbol)
+                .font(.system(size: icon, weight: .semibold))
+                .frame(width: Self.width - (open ? 52 : 0))
+            if open {
+                Text(label).font(.system(size: icon * 0.8, weight: on ? .bold : .medium)).lineLimit(1)
+                Spacer(minLength: 0)
+            }
         }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-struct ErrorView: View {
-    @Environment(AppModel.self) private var model
-    let text: String
-    var body: some View {
-        VStack(spacing: 16) {
-            Spacer()
-            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 40)).foregroundStyle(Theme.bad)
-            Text("Couldn’t load your source").font(.system(size: 22, weight: .semibold))
-            Text(text).foregroundStyle(Theme.dim).multilineTextAlignment(.center).frame(maxWidth: 520)
-            Button("Try again") { Task { await model.load(force: true) } }.buttonStyle(PillButtonStyle(primary: true))
-            Spacer()
+        .foregroundStyle(lit ? Color.white : Color.white.opacity(0.55))
+        .frame(height: row)
+        .frame(minWidth: Self.width, alignment: .leading)
+        .overlay(alignment: .leading) {
+            if on { Capsule().fill(Theme.blue).frame(width: 4, height: row * 0.46) }
         }
-        .frame(maxWidth: .infinity)
-        .padding()
+        .background {
+            if focus == key { RoundedRectangle(cornerRadius: 10, style: .continuous).fill(.white.opacity(0.12)).padding(.horizontal, 10) }
+        }
     }
 }
 

@@ -192,16 +192,26 @@ final class AppModel {
         }
     }
 
-    /// Worked out again only when the catalogue, My List or history changes.
-    @ObservationIgnored private var recCache: (sig: String, value: Recommendations)?
+    /// Worked out again (off the main thread) only when the catalogue, My List or history
+    /// changes; the last result shows meanwhile.
+    var recs = Recommendations()
+    @ObservationIgnored private var recSig = ""
     var recommendations: Recommendations {
         let p = profile
         let sig = "\(p.id)|\(shelfMovies.count)|\(shelfSeries.count)|\(p.myList.map(\.key).joined(separator: ","))|\(p.progress.count)|\(p.progress.values.filter(\.finished).count)"
-        if let c = recCache, c.sig == sig { return c.value }
-        let value = Recommender.recommend(candidates: shelfMovies + shelfSeries, categories: categories, myList: p.myList,
-                                          history: Array(p.progress.values), channelLookup: channel)
-        recCache = (sig, value)
-        return value
+        if sig != recSig {
+            recSig = sig
+            let candidates = shelfMovies + shelfSeries, cats = categories, all = live + movies + series
+            Task {
+                let value = await Task.detached(priority: .utility) {
+                    let byId = Dictionary(all.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+                    return Recommender.recommend(candidates: candidates, categories: cats, myList: p.myList,
+                                                 history: Array(p.progress.values), channelLookup: { byId[$0] })
+                }.value
+                if sig == self.recSig { self.recs = value }
+            }
+        }
+        return recs
     }
 
     // MARK: channel filters (countries, hidden, sort)
@@ -344,21 +354,54 @@ final class AppModel {
         refilter()
     }
 
-    /// Apply the active profile's Kids / hide-adult settings to the lists.
+    /// Apply the active profile's Kids / hide-adult / country / movie filters to the lists.
+    /// The work runs off the main thread (big catalogues froze the remote on Apple TV);
+    /// the newest call wins.
+    @ObservationIgnored private var filterGeneration = 0
     func refilter() {
         applyAccent()
-        let shown = ContentFilter.apply(channels: allChannels, categories: allCategories, profile: profile)
-        let sort = profile.channelSort
-        live = sorted(shown.channels.filter { $0.kind == .live }, sort)
-        movies = shown.channels.filter { $0.kind == .movie }
-        series = shown.channels.filter { $0.kind == .series }
-        categories = sort == .name
+        filterGeneration += 1
+        let generation = filterGeneration
+        let channels = allChannels, cats = allCategories, p = profile
+        Task {
+            let shown = await Task.detached(priority: .userInitiated) { AppModel.filtered(channels, cats, p) }.value
+            guard generation == self.filterGeneration else { return }
+            live = shown.live
+            movies = shown.movies
+            series = shown.series
+            categories = shown.categories
+            shelfMovies = shown.shelfMovies
+            shelfSeries = shown.shelfSeries
+            shelfLive = shown.shelfLive
+        }
+    }
+
+    private struct Filtered {
+        var live: [Channel], movies: [Channel], series: [Channel], categories: [Category]
+        var shelfMovies: [Channel], shelfSeries: [Channel], shelfLive: [Channel]
+    }
+
+    nonisolated private static func filtered(_ channels: [Channel], _ cats: [Category], _ p: Profile) -> Filtered {
+        let shown = ContentFilter.apply(channels: channels, categories: cats, profile: p)
+        let sort = p.channelSort
+        var live = shown.channels.filter { $0.kind == .live }
+        switch sort {
+        case .provider: break
+        case .name: live.sort { $0.cleanName.localizedStandardCompare($1.cleanName) == .orderedAscending }
+        case .number: live.sort { ($0.number ?? .max) < ($1.number ?? .max) }
+        }
+        let movies = shown.channels.filter { $0.kind == .movie }
+        let series = shown.channels.filter { $0.kind == .series }
+        let categories = sort == .name
             ? shown.categories.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
             : shown.categories
-        shelfMovies = ContentFilter.shelf(movies, categories: categories, profile: profile)
-        shelfSeries = ContentFilter.shelf(series, categories: categories, profile: profile)
         let adultLive = Set(categories.filter { $0.kind == .live && ContentFilter.matches(ContentFilter.adult, $0.name) }.map(\.id))
-        shelfLive = live.filter { c in !(c.group.map { adultLive.contains($0) } ?? false) && !ContentFilter.matches(ContentFilter.adult, c.name) }
+        return Filtered(
+            live: live, movies: movies, series: series, categories: categories,
+            shelfMovies: ContentFilter.shelf(movies, categories: categories, profile: p),
+            shelfSeries: ContentFilter.shelf(series, categories: categories, profile: p),
+            shelfLive: live.filter { c in !(c.group.map { adultLive.contains($0) } ?? false) && !ContentFilter.matches(ContentFilter.adult, c.name) }
+        )
     }
 
     // MARK: movie & series filters
@@ -371,12 +414,14 @@ final class AppModel {
     var shelfLive: [Channel] = []
 
     /// Countries and languages found in the movie and series lists, most titles first.
-    var vodCountries: [CountryCount] {
+    var vodCountries: [CountryCount] { Self.countVodCountries(movies + series, categories) }
+
+    nonisolated static func countVodCountries(_ list: [Channel], _ categories: [Category]) -> [CountryCount] {
         let catCountry = ContentFilter.categoryCountries(categories)
         var counts: [String: Int] = [:]
         var perGroup: [String: Int] = [:]
         var loose: [Channel] = []
-        for c in movies + series {
+        for c in list {
             if let g = c.group, catCountry[g] != nil { perGroup[g, default: 0] += 1 } else { loose.append(c) }
         }
         for (g, n) in perGroup { if let code = catCountry[g] { counts[code, default: 0] += n } }
@@ -406,7 +451,12 @@ final class AppModel {
         guard !demo, let source = currentSource else { return }
         let url = cacheURL(source.id)
         var cachedAt: Date?
-        if let data = try? Data(contentsOf: url), let cache = try? JSONDecoder().decode(Cache.self, from: data) {
+        // Reading a big catalogue takes a while: off the main thread.
+        let cached = await Task.detached(priority: .userInitiated) { () -> Cache? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(Cache.self, from: data)
+        }.value
+        if let cache = cached {
             apply(cache.channels, cache.categories)
             cachedAt = cache.fetchedAt
         }
@@ -426,7 +476,7 @@ final class AppModel {
             }
             apply(channels, cats)
             let cache = Cache(channels: channels, categories: cats, fetchedAt: Date())
-            try? JSONEncoder().encode(cache).write(to: url)
+            Task.detached(priority: .utility) { try? JSONEncoder().encode(cache).write(to: url) }
         } catch {
             if cachedAt == nil { self.error = error.localizedDescription }
         }

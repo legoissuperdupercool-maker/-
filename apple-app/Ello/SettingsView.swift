@@ -18,7 +18,7 @@ struct SettingsView: View {
                         HStack(spacing: 14) {
                             ForEach(UITheme.allCases) { t in
                                 Button { model.uiTheme = t } label: { LookOption(theme: t, on: model.uiTheme == t).frame(width: 170) }
-                                    .buttonStyle(.plain)
+                                    .buttonStyle(.ello)
                             }
                         }
                         .padding(.vertical, 6)
@@ -40,7 +40,7 @@ struct SettingsView: View {
                                         .strokeBorder(.white, lineWidth: model.profile.accent == nil ? 2.5 : 0).padding(-4))
                                     .padding(4)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.ello)
                             .accessibilityLabel("The look's own colour")
                             ForEach(Theme.accents, id: \.id) { a in
                                 Button {
@@ -53,7 +53,7 @@ struct SettingsView: View {
                                             .strokeBorder(.white, lineWidth: model.profile.accent == a.id ? 2.5 : 0).padding(-4))
                                         .padding(4)
                                 }
-                                .buttonStyle(.plain)
+                                .buttonStyle(.ello)
                                 .accessibilityLabel(a.name)
                             }
                         }
@@ -315,7 +315,10 @@ struct VodFilterView: View {
             .searchable(text: $query, prompt: "Find a category")
             .navigationTitle("Movies & series")
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
-            .task { countries = model.vodCountries }
+            .task {
+                let list = model.movies + model.series, cats = model.categories
+                countries = await Task.detached(priority: .userInitiated) { AppModel.countVodCountries(list, cats) }.value
+            }
         }
         .preferredColorScheme(.dark)
     }

@@ -233,6 +233,6 @@ struct EpisodeRow: View {
             .padding(10)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16))
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.ello)
     }
 }

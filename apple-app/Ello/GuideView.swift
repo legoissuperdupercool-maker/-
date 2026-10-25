@@ -39,7 +39,7 @@ struct GuideView: View {
                                 .background(selected?.id == c.id ? Theme.surface2 : Color.clear, in: RoundedRectangle(cornerRadius: 12))
                                 .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(.ello)
                         }
                     }
                 }
